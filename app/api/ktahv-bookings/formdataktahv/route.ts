@@ -1,0 +1,909 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { getPool } from "@/lib/db";
+import { selectAxisPropsNeededForCartesianGridTicksGenerator } from 'recharts/types/state/selectors/axisSelectors';
+import { title } from 'process';
+
+
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
+export async function GET(req: NextRequest) {
+    const pool = await getPool();
+    const { searchParams } = new URL(req.url)
+    let id = searchParams.get('id')
+    let formType = searchParams.get('formType')
+    if (id) {
+        const addeditconn = await pool.getConnection();
+        const collectionconn = await pool.getConnection();
+        const ktahvconn = await pool.getConnection();
+        const ktahv2conn = await pool.getConnection();
+        return NextResponse.json(await getDataById_NewXXXX(id, formType, addeditconn, collectionconn, ktahvconn, ktahv2conn))
+    }
+    var allData = await getAllData(pool);
+    return NextResponse.json(allData)
+}
+async function getAllData(pool: any) {
+    const roommaxpaxconn = await pool.getConnection();
+    const servicesconn = await pool.getConnection();
+    const rackPackagesconn = await pool.getConnection();
+    const roomPricesconn = await pool.getConnection();
+    const mealPricesconn = await pool.getConnection();
+    const childRateconn = await pool.getConnection();
+    const requiedetailsconn = await pool.getConnection();
+    const travelagentconn = await pool.getConnection();
+    var data = {
+        success: true,
+        timestamp: new Date().toISOString(),
+        data: {}
+    };
+    var roomMaxPaxMap = await getRoomMaxPaxes(roommaxpaxconn);
+    data.data[roomMaxPaxMap[0]] = roomMaxPaxMap[1];
+    var servicesData = await getServices(servicesconn);
+    data.data[servicesData[0]] = servicesData[1];
+    var rackPackagesData = await getRackPackages(rackPackagesconn);
+    data.data[rackPackagesData[0]] = rackPackagesData[1];
+    var roomPricesData = await getRoomPrices(roomPricesconn);
+    data.data[roomPricesData[0]] = roomPricesData[1];
+    var mealPricesData = await getMealPrices(mealPricesconn);
+    data.data[mealPricesData[0]] = mealPricesData[1];
+    var dataSourceData = await getDataSource(requiedetailsconn);
+    data.data[dataSourceData[0]] = dataSourceData[1];
+    var clientTypeData = await getClientType(requiedetailsconn);
+    data.data[clientTypeData[0]] = clientTypeData[1];
+    var clientCategoryData = await getClientCategory(requiedetailsconn);
+    data.data[clientCategoryData[0]] = clientCategoryData[1];
+    var paymentTermsData = await getPaymentTerms(requiedetailsconn);
+    data.data[paymentTermsData[0]] = paymentTermsData[1];
+    var childRateData = await getChildRate(childRateconn);
+    data.data[childRateData[0]] = childRateData[1];
+    var taAcitveData = await getTravelAgentData(travelagentconn);
+    data.data[taAcitveData[0]] = taAcitveData[1];
+
+    return data;
+}
+
+async function getDataById_NewXXXX(currentTextId: any, formType: any, addeditconn: any, collectionconn: any, ktahvconn: any, ktahv2conn: any) {
+    if (formType === "individual") {
+        var bookingId = (currentTextId.toString().split("|")[0]).replace("EF", "PMS");
+        var collectionAmountMap = await getCollectionById(bookingId, collectionconn, ktahvconn)
+        try {
+            let [rows] = await addeditconn.execute(
+                `Select 
+                    p1.timestamp,
+                    p1.buyer_id,
+                    p1.booking_datetime,
+                    p1.booking_id,
+                    p1.guest_id,
+                    p1.edit_id,
+                    p1.client_name,
+                    p1.dial_country_code,
+                    p1.mobile,
+                    p1.email,
+                    p1.gender,
+                    p1.billing_address,
+                    p1.country,
+                    p1.state,
+                    p1.arrival_date,
+                    p1.departure_date,
+                    p1.days_of_stay ,
+                    p1.package_type ,
+                    p1.programme_package_name ,
+                    p1.room_no,
+                    p1.room_type ,
+                    p1.room_category,
+                    p1.number_of_adults,
+                    p1.number_of_children,
+                    p1.payment_terms,
+                    p1.client_category,
+                    p1.client_type,
+                    p1.repeat_client,
+                    p1.txt_Postal_Code,
+                    p2.txt_Nationality,
+                    p2.ddl_tpt,
+                    p2.txt_DateOfBirth,
+                    p2.txt_tpt_note,
+                    p2. ddl_srcof_client,
+                    p2.txt_Date_Of_Anniversary1,
+                    p3.child_txt_first_name1,
+                    p3.child_txt_Last_name1,
+                    p3. child_txt_Age1,
+                    p3.child_txt_first_name2,
+                    p3.child_txt_Last_name2,
+                    p3.child_txt_Age2,
+                    p3.child_txt_first_name3,
+                    p3.child_txt_Last_name3,
+                    p3.child_txt_Age3,
+                    p3.child_txt_first_name4,
+                    p3.child_txt_Last_name4,
+                    p3.child_txt_Age4,
+                    p3.child_txt_first_name5,
+                    p3.child_txt_Last_name5,
+                    p3.child_txt_Age5,
+                    p3.ddl_Title1,p3.txt_Family_Name1,p3.txt_First_Name1,p3.ddl_gender1,p3.txt_DateOfBirth1,p3.txt_Age1,p3.txt_DateOfAnniversary2,p3.txt_Nationality1 ,p3.ddl_Country2,p3.ddl_States2 ,p3.txt_Home_Address1 ,p3.txt_Postal_Code1 ,p3.txt_Code2 ,p3.txt_TelephoneNo1 ,p3.txt_Email_ID1 ,p3.txt_Home_Fascimile1 ,p3.txt_Arrival2 ,p3.txt_Departure2 ,p3.txt_nights2 ,p3.ddl_Packages2 ,p3.ddl_relationship1 ,
+                    p3.ddl_Title2 ,p3.txt_FamilyName2 ,p3.txt_FirstName2 ,p3.ddl_gender2 ,p3.txt_DateOfBirth2 ,p3.txt_Age2  ,p3.txt_DateOfAnniversary3 ,p3.txt_Nationality2 ,p3.ddl_Country3 ,p3.ddl_States3 ,p3.txt_HomeAddress2 ,p3.txt_PostalCode2 ,p3.txt_Code3 ,p3.txt_Telephone_No2 ,p3.txt_Email_ID2 ,p3.txt_Home_Fascimile2 ,p3.txt_Arrival3 ,p3.txt_Departure3 ,p3.txt_nights3 ,p3.ddl_Packages3 ,p3.ddl_relationship2 ,
+                    p3.ddl_Title3 ,p3.txt_Family_Name3 ,p3.txt_First_Name3 ,p3.ddl_gender3 ,p3.txt_DateOfBirth3 ,p3.txt_Age3 ,p3.txt_DateOfAnniversary4 ,p3.txt_Nationality3 ,p3.ddl_Country4 ,p3.ddl_States4 ,p3.txt_HomeAddress3 ,p3.txt_PostalCode3 ,p3.txt_Code4 ,p3.txt_TelephoneNo3 ,p3.txt_EmailID3 ,p3.txt_HomeFascimile3 ,p3.txt_Arrival4 ,p3.txt_Departure4 ,p3.txt_nights4 ,p3.ddl_Packages4 ,p3.ddl_relationship3 
+                    FROM ktahv_reservation_database_add_edit_part1 p1 
+                    LEFT JOIN ktahv_reservation_database_add_edit_part2 p2 
+                        ON p1.unique_key = p2.unique_key
+                    LEFT JOIN ktahv_reservation_database_add_edit_part3 p3 
+                        ON p1.unique_key = p3.unique_key
+                    where p1.edit_id = ?
+                `, [currentTextId]
+            );
+            var mappeddata = {};
+            for (let i = 0; i < rows.length; i++) {
+                let r = rows[i];
+                if (!r.timestamp || !r.booking_id) continue;
+                const personName = r.client_name ? r.client_name.toString().trim().split(" ") : [""];
+                let title = "", firstName = "", middleName = "", lastName = "";
+                if (personName.length === 1) {
+                    firstName = personName[0];
+                } else if (personName.length === 2) {
+                    title = personName[0];
+                    firstName = personName[1];
+                } else if (personName.length === 3) {
+                    title = personName[0];
+                    firstName = personName[1];
+                    lastName = personName[2];
+                } else if (personName.length > 3) {
+                    title = personName[0];
+                    firstName = personName[1];
+                    lastName = personName[personName.length - 1];
+                    middleName = personName.slice(2, -1).join(" ");
+                }
+
+                let primaryCountryCodeStr = r.dial_country_code
+                    ? getCountryCode(r.dial_country_code.toString())
+                    : null;
+
+                let numOfPax = r.number_of_adults || 0;
+                let secondaryGuests = {};
+                if (numOfPax == 2) {
+                    let sg1constr = r.txt_Code2 ? getCountryCode(String(r.txt_Code2)) : null;
+                    secondaryGuests["secondaryguest1"] = {
+                        ["g1-title_1"]: r.ddl_Title1 || '',
+                        [`g1-firstname_1`]: r.txt_First_Name1 || '',
+                        [`g1-lastname_1`]: r.txt_Family_Name1 || '',
+                        [`g1-dob_1`]: r.txt_DateOfBirth1 || '',
+                        [`g1-gender_1`]: r.ddl_gender1 || '',
+                        [`g1-country-code_1`]: sg1constr,
+                        [`g1-contact_1`]: r.txt_TelephoneNo1 || '',
+                        [`g1-email_1`]: r.txt_Email_ID1 || '',
+                        [`g1-anniversary_1`]: r.txt_DateOfAnniversary2 || '',
+                        [`g1-nationality_1`]: r.txt_Nationality1 || '',
+                        [`g1-country_1`]: r.ddl_Country2 || '',
+                        [`g1-province_1`]: r.ddl_States2 || '',
+                        [`g1-zip_1`]: r.txt_Postal_Code1 || '',
+                        [`g1-address_1`]: r.txt_Home_Address1 || '',
+                        [`g1-arrival-date_1`]: r.txt_Arrival2 || '',
+                        [`g1-departure-date_1`]: r.txt_Departure2 || '',
+                        [`g1-nights_1`]: r.txt_nights2 || '',
+                        [`g1-repeat-guest_1`]: r.repeat_client || '',
+                        [`g1-programme_1`]: r.ddl_Packages2 || '',
+                        [`g1-room-type_1`]: r.room_category || '',
+                        [`g1-room-no_1`]: r.room_no || '',
+                        [`g1-room-cat_1`]: r.room_type || ''
+                    }
+                } else if (numOfPax == 3) {
+                    let sg1constr = r.txt_Code2 ? getCountryCode(String(r.txt_Code2)) : null;
+                    let sg2constr = r.txt_Code3 ? getCountryCode(String(r.txt_Code3)) : null;
+                    secondaryGuests["secondaryguest1"] = {
+                        ["g1-title_1"]: r.ddl_Title1 || '',
+                        [`g1-firstname_1`]: r.txt_First_Name1 || '',
+                        [`g1-lastname_1`]: r.txt_Family_Name1 || '',
+                        [`g1-dob_1`]: r.txt_DateOfBirth1 || '',
+                        [`g1-gender_1`]: r.ddl_gender1 || '',
+                        [`g1-country-code_1`]: sg1constr,
+                        [`g1-contact_1`]: r.txt_TelephoneNo1 || '',
+                        [`g1-email_1`]: r.txt_Email_ID1 || '',
+                        [`g1-anniversary_1`]: r.txt_DateOfAnniversary2 || '',
+                        [`g1-nationality_1`]: r.txt_Nationality1 || '',
+                        [`g1-country_1`]: r.ddl_Country2 || '',
+                        [`g1-province_1`]: r.ddl_States2 || '',
+                        [`g1-zip_1`]: r.txt_Postal_Code1 || '',
+                        [`g1-address_1`]: r.txt_Home_Address1 || '',
+                        [`g1-arrival-date_1`]: r.txt_Arrival2 || '',
+                        [`g1-departure-date_1`]: r.txt_Departure2 || '',
+                        [`g1-nights_1`]: r.txt_nights2 || '',
+                        [`g1-repeat-guest_1`]: r.repeat_client || '',
+                        [`g1-programme_1`]: r.ddl_Packages2 || '',
+                        [`g1-room-type_1`]: r.room_category || '',
+                        [`g1-room-no_1`]: r.room_no || '',
+                        [`g1-room-cat_1`]: r.room_type || ''
+                    }
+                    secondaryGuests["secondaryguest2"] = {
+                        ["g2-title_2"]: r.ddl_Title2 || '',
+                        [`g2-firstname_2`]: r.txt_First_Name2 || '',
+                        [`g2-lastname_2`]: r.txt_Family_Name2 || '',
+                        [`g2-dob_2`]: r.txt_DateOfBirth2 || '',
+                        [`g2-gender_2`]: r.ddl_gender2 || '',
+                        [`g2-country-code_2`]: sg2constr,
+                        [`g2-contact_2`]: r.txt_TelephoneNo2 || '',
+                        [`g2-email_2`]: r.txt_Email_ID2 || '',
+                        [`g2-anniversary_2`]: r.txt_DateOfAnniversary3 || '',
+                        [`g2-nationality_2`]: r.txt_Nationality2 || '',
+                        [`g2-country_2`]: r.ddl_Country3 || '',
+                        [`g2-province_2`]: r.ddl_States3 || '',
+                        [`g2-zip_2`]: r.txt_Postal_Code2 || '',
+                        [`g2-address_2`]: r.txt_Home_Address2 || '',
+                        [`g2-arrival-date_2`]: r.txt_Arrival3 || '',
+                        [`g2-departure-date_2`]: r.txt_Departure3 || '',
+                        [`g2-nights_2`]: r.txt_nights3 || '',
+                        [`g2-repeat-guest_2`]: r.repeat_client || '',
+                        [`g2-programme_2`]: r.ddl_Packages3 || '',
+                        [`g2-room-type_2`]: r.room_category || '',
+                        [`g2-room-no_2`]: r.room_no || '',
+                        [`g2-room-cat_2`]: r.room_type || ''
+                    }
+                } else if (numOfPax == 4) {
+                    let sg1constr = r.txt_Code2 ? getCountryCode(String(r.txt_Code2)) : null;
+                    let sg2constr = r.txt_Code3 ? getCountryCode(String(r.txt_Code3)) : null;
+                    let sg3constr = r.txt_Code4 ? getCountryCode(String(r.txt_Code4)) : null;
+                    secondaryGuests["secondaryguest1"] = {
+                        ["g1-title_1"]: r.ddl_Title1 || '',
+                        [`g1-firstname_1`]: r.txt_First_Name1 || '',
+                        [`g1-lastname_1`]: r.txt_Family_Name1 || '',
+                        [`g1-dob_1`]: r.txt_DateOfBirth1 || '',
+                        [`g1-gender_1`]: r.ddl_gender1 || '',
+                        [`g1-country-code_1`]: sg1constr,
+                        [`g1-contact_1`]: r.txt_TelephoneNo1 || '',
+                        [`g1-email_1`]: r.txt_Email_ID1 || '',
+                        [`g1-anniversary_1`]: r.txt_DateOfAnniversary2 || '',
+                        [`g1-nationality_1`]: r.txt_Nationality1 || '',
+                        [`g1-country_1`]: r.ddl_Country2 || '',
+                        [`g1-province_1`]: r.ddl_States2 || '',
+                        [`g1-zip_1`]: r.txt_Postal_Code1 || '',
+                        [`g1-address_1`]: r.txt_Home_Address1 || '',
+                        [`g1-arrival-date_1`]: r.txt_Arrival2 || '',
+                        [`g1-departure-date_1`]: r.txt_Departure2 || '',
+                        [`g1-nights_1`]: r.txt_nights2 || '',
+                        [`g1-repeat-guest_1`]: r.repeat_client || '',
+                        [`g1-programme_1`]: r.ddl_Packages2 || '',
+                        [`g1-room-type_1`]: r.room_category || '',
+                        [`g1-room-no_1`]: r.room_no || '',
+                        [`g1-room-cat_1`]: r.room_type || ''
+                    }
+                    secondaryGuests["secondaryguest2"] = {
+                        ["g2-title_2"]: r.ddl_Title2 || '',
+                        [`g2-firstname_2`]: r.txt_First_Name2 || '',
+                        [`g2-lastname_2`]: r.txt_Family_Name2 || '',
+                        [`g2-dob_2`]: r.txt_DateOfBirth2 || '',
+                        [`g2-gender_2`]: r.ddl_gender2 || '',
+                        [`g2-country-code_2`]: sg2constr,
+                        [`g2-contact_2`]: r.txt_TelephoneNo2 || '',
+                        [`g2-email_2`]: r.txt_Email_ID2 || '',
+                        [`g2-anniversary_2`]: r.txt_DateOfAnniversary3 || '',
+                        [`g2-nationality_2`]: r.txt_Nationality2 || '',
+                        [`g2-country_2`]: r.ddl_Country3 || '',
+                        [`g2-province_2`]: r.ddl_States3 || '',
+                        [`g2-zip_2`]: r.txt_Postal_Code2 || '',
+                        [`g2-address_2`]: r.txt_Home_Address2 || '',
+                        [`g2-arrival-date_2`]: r.txt_Arrival3 || '',
+                        [`g2-departure-date_2`]: r.txt_Departure3 || '',
+                        [`g2-nights_2`]: r.txt_nights3 || '',
+                        [`g2-repeat-guest_2`]: r.repeat_client || '',
+                        [`g2-programme_2`]: r.ddl_Packages3 || '',
+                        [`g2-room-type_2`]: r.room_category || '',
+                        [`g2-room-no_2`]: r.room_no || '',
+                        [`g2-room-cat_2`]: r.room_type || ''
+                    }
+                    secondaryGuests["secondaryguest3"] = {
+                        ["g3-title_3"]: r.ddl_Title3 || '',
+                        [`g3-firstname_3`]: r.txt_First_Name3 || '',
+                        [`g3-lastname_3`]: r.txt_Family_Name3 || '',
+                        [`g3-dob_3`]: r.txt_DateOfBirth3 || '',
+                        [`g3-gender_3`]: r.ddl_gender3 || '',
+                        [`g3-country-code_3`]: sg3constr,
+                        [`g3-contact_3`]: r.txt_TelephoneNo3 || '',
+                        [`g3-email_3`]: r.txt_Email_ID3 || '',
+                        [`g3-anniversary_3`]: r.txt_DateOfAnniversary4 || '',
+                        [`g3-nationality_3`]: r.txt_Nationality3 || '',
+                        [`g3-country_3`]: r.ddl_Country4 || '',
+                        [`g3-province_3`]: r.ddl_States4 || '',
+                        [`g3-zip_3`]: r.txt_Postal_Code3 || '',
+                        [`g3-address_3`]: r.txt_Home_Address3 || '',
+                        [`g3-arrival-date_3`]: r.txt_Arrival4 || '',
+                        [`g3-departure-date_3`]: r.txt_Departure4 || '',
+                        [`g3-nights_3`]: r.txt_nights4 || '',
+                        [`g3-repeat-guest_3`]: r.repeat_client || '',
+                        [`g3-programme_3`]: r.ddl_Packages4 || '',
+                        [`g3-room-type_3`]: r.room_category || '',
+                        [`g3-room-no_3`]: r.room_no || '',
+                        [`g3-room-cat_3`]: r.room_type || ''
+                    }
+                }
+                mappeddata[r.edit_id] = {
+                    "guest-id": r.edit_id || '',
+                    primaryGuest: {
+                        'g1-title': title,
+                        'g1-firstname': firstName,
+                        'g1-middlename': middleName,
+                        'g1-lastname': lastName,
+                        'g1-dob': r.txt_DateOfBirth ? r.txt_DateOfBirth : '',
+                        'g1-gender': r.gender || '',
+                        'g1-country-code': primaryCountryCodeStr,
+                        'g1-contact': r.mobile || '',
+                        'g1-email': r.email || '',
+                        'g1-anniversary': r.txt_Date_Of_Anniversary1 || '',
+                        'g1-nationality': r.txt_Nationality || '',
+                        'g1-country': r.country || '',
+                        'g1-province': r.state || '',
+                        'g1-zip': r.txt_Postal_Code || '',
+                        'g1-address': r.billing_address || ''
+                    },
+
+                    primaryBooking: {
+                        'g1-arrival-date': r.arrival_date ? new Date(r.arrival_date).toLocaleDateString("en-US", { timeZone: "Asia/Kolkata" }) : '',
+                        'g1-departure-date': r.departure_date ? new Date(r.departure_date).toLocaleDateString("en-US", { timeZone: "Asia/Kolkata" }) : '',
+                        'g1-nights': r.days_of_stay || '',
+                        'g1-repeat-guest': r.repeat_client || '',
+                        'g1-package-type': r.package_type || '',
+                        'g1-programme': r.programme_package_name || '',
+                        'g1-room-type': r.room_category || '',
+                        'g1-room-no': r.room_no || '',
+                        'g1-room-cat': r.room_type || ''
+                    },
+
+                    secondaryGuestPattern: secondaryGuests,
+                    'guest-count': numOfPax,
+                    children: {
+                        'children-count': Number(r.number_of_children) || 0,
+                        'child1-name': `${r.child_txt_first_name1 || ''}${r.child_txt_Last_name1 ? ' ' + r.child_txt_Last_name1 : ''}`,
+                        'child1-age': r.child_txt_Age1 || '',
+                        'child2-name': `${r.child_txt_first_name2 || ''}${r.child_txt_Last_name2 ? ' ' + r.child_txt_Last_name2 : ''}`,
+                        'child2-age': r.child_txt_Age2 || '',
+                        'child3-name': `${r.child_txt_first_name3 || ''}${r.child_txt_Last_name3 ? ' ' + r.child_txt_Last_name3 : ''}`,
+                        'child3-age': r.child_txt_Age3 || '',
+                        'child4-name': `${r.child_txt_first_name4 || ''}${r.child_txt_Last_name4 ? ' ' + r.child_txt_Last_name4 : ''}`,
+                        'child4-age': r.child_txt_Age4 || '',
+                        'child5-name': `${r.child_txt_first_name5 || ''}${r.child_txt_Last_name5 ? ' ' + r.child_txt_Last_name5 : ''}`,
+                        'child5-age': r.child_txt_Age5 || ''
+                    },
+
+                    additionalInfo: {
+                        'client-category': r.client_category || '',
+                        'client-type': r.client_type || '',
+                        'payment-terms': r.payment_terms || '',
+                        'data-source': r.data_source || '',
+                        'transportation-details': r.ddl_tpt || '',
+                        'referred-by': '',
+                        'health-information': '',
+                        'uploadTestReport': ''
+                    },
+
+                    travelAgent: {
+                        'no-agent': '',
+                        'agent-name': '',
+                        'agent-country-code': '',
+                        'agent-mobile': '',
+                        'agent-email': '',
+                        'agent-category': '',
+                        'agent-commission': '',
+                        'agent-remarks': ''
+                    },
+
+                    advancePayment: {
+                        'payment-datetime': '',
+                        'received-amount': '',
+                        'payment-mode': '',
+                        'transaction-no': '',
+                        'payment-location': '',
+                        'payment-by': '',
+                        'payment-screenshot': '',
+                        'total-amount': collectionAmountMap[bookingId].collection.lblFinalAmountToCollect,
+                        'percentage-amount': (collectionAmountMap[bookingId].collection.lblFinalAmountToCollect / collectionAmountMap[bookingId].collection.lblBookingAmount) * 100 || 0,
+                        'pending-amount': collectionAmountMap[bookingId].collection.lblBookingAmount - collectionAmountMap[bookingId].collection.lblFinalAmountToCollect
+                    },
+
+                    approval: {
+                        'lockApproval': collectionAmountMap[bookingId].ApprovalGivenDate ? true : false,
+                        'approval-date': collectionAmountMap[bookingId].ApprovalGivenDate,
+                        'approved-till-date': collectionAmountMap[bookingId].ApprovedTillDate,
+                        'approved-by': collectionAmountMap[bookingId]['Approved By'],
+                        'approval-screenshot': collectionAmountMap[bookingId].ApprovalScreenshot,
+                        'approval-remarks': collectionAmountMap[bookingId].Remarks
+                    },
+                    txttptnote: r.txt_tpt_note || ''
+                };
+
+            }
+
+            return mappeddata;
+
+        } finally {
+            addeditconn?.release();
+            ktahv2conn?.release();
+        }
+    } else if (formType == "group") {
+        try {
+            let [ktahvrow] = await ktahv2conn.execute(`SELECT reservation_id, client_category, client_type, data_source_auto, payment_terms FROM ktahv_bookings_fms_v3_part1 WHERE guest_id =?`, [currentTextId]);
+            var resId = "";
+            var clientCategory = "";
+            var clientType = "";
+            var paymentTerms = "";
+            var dataSource = "";
+            for (let i = 0; i < ktahvrow.length; i++) {
+                let r = ktahvrow[i];
+                if (resId == "") {
+                    resId = r.reservation_id;
+                    clientCategory = r.client_category || "";
+                    clientType = r.client_type || "";
+                    paymentTerms = r.payment_terms || "";
+                    dataSource = r.data_source_auto || "";
+                }
+            }
+            var collectionAmountMap = await getCollectionById(resId, collectionconn, ktahvconn);
+            let [groupbookingdata] = await addeditconn.execute(`
+                SELECT 
+                    p1.ddl_choose_Pax,
+                    p1.Res_code,
+                    p1.edit_ID ,
+                    p1.txt_grp_name ,
+                    p1.txt_ref_name,
+                    p1.txt_code ,
+                    p1.txt_ref_phne ,
+                    p1.txt_ref_email ,
+                    p1.txt_patient_ID1 ,
+                    p1.txt_TelephoneNo1 ,
+                    p1.ddl_gender1 ,
+                    p1.txt_age1 ,
+                    p1.ddl_country1,
+                    p1.ddl_Packages1,
+                    p1.ddl_RoomTpye1,
+                    p1.room_type_Chk1,
+                    p1.ddl_room_no1,
+                    p1.txt_Arrival1,
+                    p1.txt_Departure1,
+                    p1.txt_nights1,
+                    p2.booking_taken_by,
+                    p2.edit_time_value,
+                    p2.state,
+                    p2.zip,
+                    p2.address,
+                    p2.repeat_guest
+                    FROM response_of_group_bookings_part1 p1 
+                    LEFT JOIN response_of_group_bookings_part2 p2 ON p1.unique_key = p2.unique_key
+                    WHERE p1.Res_code =? 
+                `, [currentTextId]);
+            var maxEditTime = 0;
+            let rowdata = [];
+            for (let i = 0; i < groupbookingdata.length; i++) {
+                let r = groupbookingdata[i];
+                if (r.edit_time_value > maxEditTime) {
+                    maxEditTime = r.edit_time_value;
+                    rowdata = [r];
+                } else if (r.edit_time_value == maxEditTime) {
+                    rowdata.push(r);
+                }
+            }
+            var secondaryGuests = {};
+            var grpName = "", grpPhone = "", grpEmail = "", grpPax = "", notes = "", grpedID = "", grpPatientId = "", grpUniqueId = "", grpCountry = "";
+            var guestIndex = 1;
+            for (var i = 0; i < rowdata.length; i++) {
+                let r = rowdata[i];
+                if (guestIndex == 1) {
+                    grpPax = r.ddl_choose_Pax || '';
+                    grpName = r.txt_grp_name || '';
+                    grpPhone = r.txt_ref_phne || '';
+                    grpEmail = r.txt_ref_email || '';
+                    grpCountry = r.ddl_country1 || '';
+                    grpUniqueId = `KTAHV-PMS-${r.txt_patient_ID1 || ''}`
+                }
+                notes = r.booking_taken_by;
+                grpedID = r.edit_ID || '';
+                grpPatientId = r.txt_patient_ID1 || '';
+                var name = r.txt_ref_name ? r.txt_ref_name.toString().split(" ") : ['', '', ''];
+                secondaryGuests[`secondaryguest${guestIndex}`] = {
+                    [`grp_editID_${guestIndex}`]: grpedID,
+                    [`grp_patientID_${guestIndex}`]: grpPatientId,
+                    [`grp-title_${guestIndex}`]: name[0] || '',
+                    [`grp-firstname_${guestIndex}`]: name[1] || '',
+                    [`grp-middlename_${guestIndex}`]: "",
+                    [`grp-lastname_${guestIndex}`]: name[2] || '',
+                    [`grp-dob_${guestIndex}`]: "",
+                    [`grp-gender_${guestIndex}`]: r.ddl_gender1 || '',
+                    [`grp-country-code_${guestIndex}`]: r.txt_code ? getCountryCode(String(r.txt_code)) : '',
+                    [`grp-contact_${guestIndex}`]: r.txt_TelephoneNo1 || '',
+                    [`grp-email_${guestIndex}`]: r.txt_ref_email || '',
+                    [`grp-anniversary_${guestIndex}`]: "",
+                    [`grp-nationality_${guestIndex}`]: "",
+                    [`grp-country_${guestIndex}`]: r.ddl_country1 || '',
+                    [`grp-province_${guestIndex}`]: r.state || '',
+                    [`grp-zip_${guestIndex}`]: r.zip || '',
+                    [`grp-address_${guestIndex}`]: r.address || '',
+                    [`grp-arrival-date_${guestIndex}`]: r.txt_Arrival1 ? new Date(r.txt_Arrival1).toLocaleDateString("en-US", { timeZone: "Asia/Kolkata" }) : '',
+                    [`grp-departure-date_${guestIndex}`]: r.txt_Departure1 ? new Date(r.txt_Departure1).toLocaleDateString("en-US", { timeZone: "Asia/Kolkata" }) : '',
+                    [`grp-nights_${guestIndex}`]: r.txt_nights1 || '',
+                    [`grp-repeat-guest_${guestIndex}`]: r.repeat_guest || '',
+                    [`grp-programme_${guestIndex}`]: r.ddl_Packages1 || '',
+                    [`grp-room-type_${guestIndex}`]: r.ddl_RoomTpye1 || '',
+                    [`grp-room-no_${guestIndex}`]: r.ddl_room_no1 || '',
+                    [`grp-room-cat_${guestIndex}`]: r.room_type_Chk1 || ''
+                };
+
+                guestIndex++;
+            }
+
+
+            return {
+                [currentTextId]: {
+                    "res_id": resId,
+                    "group-name": grpName,
+                    "guest-id": currentTextId,
+                    "grp-ref-name": grpName,
+                    "grp-country": grpCountry,
+                    "grp-phone": grpPhone,
+                    "grp-email": grpEmail,
+                    "group-pax": grpPax,
+                    "group-Unique-Id": grpUniqueId,
+                    "primaryGuest": {},
+                    "primaryBooking": {},
+                    "secondaryGuestPattern": secondaryGuests,
+                    "guest-count": "",
+                    "children": {
+                        "children-count": "", "child1-name": "", "child1-age": "",
+                        "child2-name": "", "child2-age": "", "child3-name": "", "child3-age": "",
+                        "child4-name": "", "child4-age": "", "child5-name": "", "child5-age": ""
+                    },
+                    "additionalInfo": {
+                        "client-category": clientCategory, "client-type": clientType, "payment-terms": paymentTerms,
+                        "data-source": dataSource, "transportation-details": "", "referred-by": "",
+                        "health-information": "", "uploadTestReport": ""
+                    },
+                    "travelAgent": {
+                        "no-agent": "", "agent-name": "", "agent-country-code": "",
+                        "agent-mobile": "", "agent-email": "", "agent-category": "",
+                        "agent-commission": "", "agent-remarks": ""
+                    },
+                    "advancePayment": {
+                        "payment-datetime": "", "received-amount": "", "payment-mode": "",
+                        "transaction-no": "", "payment-location": "", "payment-by": "",
+                        "payment-screenshot": "", 'total-amount': collectionAmountMap[resId].collection.lblFinalAmountToCollect,
+                        'percentage-amount': (collectionAmountMap[resId].collection.lblFinalAmountToCollect / collectionAmountMap[resId].collection.lblBookingAmount) * 100 || 0,
+                        'pending-amount': collectionAmountMap[resId].collection.lblBookingAmount - collectionAmountMap[resId].collection.lblFinalAmountToCollect
+                    },
+                    "approval": {
+                        'lockApproval': collectionAmountMap[resId].ApprovalGivenDate ? true : false,
+                        'approval-date': collectionAmountMap[resId].ApprovalGivenDate,
+                        'approved-till-date': collectionAmountMap[resId].ApprovedTillDate,
+                        'approved-by': collectionAmountMap[resId]['Approved By'],
+                        'approval-screenshot': collectionAmountMap[resId].ApprovalScreenshot,
+                        'approval-remarks': collectionAmountMap[resId].Remarks
+                    },
+                    "txttptnote": notes
+                }
+            };
+        } finally {
+            ktahv2conn?.release();
+            addeditconn?.release();
+
+
+        }
+    }
+
+}
+async function getCollectionById(bookingId: string, collectionconn: any, ktahvconn: any) {
+    try {
+        let [paymentdata] = await collectionconn.execute(
+            `SELECT 
+                timestamp,
+                booking_id,
+                payment_received_date,
+                received_amount,
+                update_status
+            FROM payment_collection 
+            WHERE booking_id=?
+            `,
+            [bookingId]
+        );
+
+        var collected = {};
+        for (let i = 0; i < paymentdata.length; i++) {
+            let r = paymentdata[i];
+            if (r.timestamp && r.payment_received_date && r.update_status) {
+                collected[r.booking_id] = (collected[r.booking_id] || 0) + parseFloat(r.received_amount)
+            }
+        }
+        var collectAmt = collected[bookingId] || 0;
+        let [ktahvdata] = await ktahvconn.execute(`
+            SELECT
+            timestamp,
+            reservation_id,
+            client_name,
+            mobile,
+            invoice_amount,
+            currency,
+            nb_aphs_approval_given_date,
+            nb_aphs_approved_till_date,
+            nb_aphs_approved_by,
+            nb_aphs_approval_screenshot,
+            nb_aphs_remarks
+            FROM ktahv_bookings_fms_v3_part1
+            WHERE reservation_id =?
+            `, [bookingId]);
+        var result = {};
+        for (let j = 0; j < ktahvdata.length; j++) {
+            let r = ktahvdata[j];
+            result[r.reservation_id] = {
+                collection: {
+                    lblBookingAmount: r.invoice_amount ? parseFloat(r.invoice_amount) : 0,
+                    lblFinalAmountToCollect: collectAmt,
+                    clientName1: r.client_name ? String(r.client_name) : "",
+                    clientMob1: r.mobile ? String(r.mobile) : "",
+                    currencyType: r.currency ? String(r.currency) : ""
+                },
+                approval: {
+                    ApprovalGivenDate: r.nb_aphs_approval_given_date ? new Date(r.nb_aphs_approval_given_date) : '',
+                    ApprovedTillDate: r.nb_aphs_approved_till_date ? new Date(r.nb_aphs_approved_till_date) : '',
+                    'Approved By': r.nb_aphs_approved_by ? String(r.nb_aphs_approved_by) : '',
+                    ApprovalScreenshot: r.nb_aphs_approval_screenshot ? String(r.nb_aphs_approval_screenshot) : '',
+                    Remarks: r.nb_aphs_remarks ? String(r.nb_aphs_remarks) : ''
+                }
+            };
+        }
+        // console.log(result)
+        return result;
+
+    } finally {
+        ktahvconn?.release();
+        collectionconn?.release();
+    }
+}
+
+function getCountryCode(str) {
+    if (!str) return "";
+
+    str = String(str).trim();
+    let match = str.match(/\+(\d{1,4})/);
+    if (match) {
+        return "+" + match[1];
+    }
+
+    if (/^\d{1,4}$/.test(str)) {
+        return "+" + str;
+    }
+
+    return "";
+}
+async function getRoomMaxPaxes(roommaxpaxconn) {
+    try {
+        var codesMap = {};
+        let [data] = await roommaxpaxconn.execute(`SELECT 
+            room_number,
+            short_form,
+            max_capacity_adult
+            FROM ktahv_room`
+        );
+        for (let i = 0; i < data.length; i++) {
+            let r = data[i];
+            if (r.room_number && r.max_capacity_adult) {
+                if (!codesMap[String(r.room_number)]) {
+                    codesMap[String(r.room_number)] = r.max_capacity_adult;
+                    if (r.short_form) {
+                        if (!codesMap[`${r.room_number}-${r.short_form}`])
+                            codesMap[`${r.room_number}-${r.short_form}`] = r.max_capacity_adult;
+                    }
+                }
+            }
+
+        }
+        return ["roomMaxPaxMap", codesMap];
+    } finally {
+        roommaxpaxconn?.release();
+    }
+}
+async function getServices(servicesconn) {
+    try {
+        var codesMap = {};
+        let [data] = await servicesconn.execute(`SELECT 
+            name,
+            inr,
+            usd,
+            euro
+            FROM ktahv_services`
+        );
+
+        for (let i = 0; i < data.length; i++) {
+            let r = data[i];
+            if (r.name && r.inr && r.usd && r.euro) {
+                codesMap[r.name] = [r.inr, r.usd, r.euro];
+            }
+
+        }
+        return ["AllServices", codesMap];
+    } finally {
+        servicesconn?.release();
+    }
+}
+async function getRackPackages(rackPackagesconn) {
+    try {
+        var codesMap = {};
+        let [data] = await rackPackagesconn.execute(`SELECT 
+            name,
+            type,
+            inr,
+            usd,
+            euro
+            FROM packages_rack_rate_modules`
+        );
+
+        for (let i = 0; i < data.length; i++) {
+            let r = data[i];
+            if (r.name && r.inr !== null && r.usd !== null && r.euro !== null) {
+                let key = r.type ? r.name + "-" + r.type : r.name
+                codesMap[key] = [r.inr, r.usd, r.euro];
+            }
+
+        }
+        return ["AllRackPackages", codesMap];
+    } finally {
+        rackPackagesconn?.release();
+    }
+}
+async function getRoomPrices(roomPricesconn) {
+    try {
+        var codesMap = {};
+        let [data] = await roomPricesconn.execute(`SELECT 
+            room_type,
+            category,
+            inr,
+            usd,
+            euro
+            FROM room_price`
+        );
+
+        for (let i = 0; i < data.length; i++) {
+            let r = data[i];
+            if (r.room_type && r.inr && r.usd && r.euro && r.category) {
+                codesMap[r.room_type + "-" + r.category] = [r.inr, r.usd, r.euro];
+            }
+
+        }
+        return ["RoomTypePrice", codesMap];
+    } finally {
+        roomPricesconn?.release();
+    }
+}
+async function getMealPrices(mealPricesconn) {
+    try {
+        var codesMap = {};
+        let [data] = await mealPricesconn.execute(`SELECT 
+            category,
+            inr,
+            usd,
+            euro
+            FROM meal_price`
+        );
+
+        for (let i = 0; i < data.length; i++) {
+            let r = data[i];
+            if (r.inr && r.usd && r.euro && r.category) {
+                codesMap[r.category] = [r.inr, r.usd, r.euro];
+            }
+
+        }
+        return ["MealTypePrice", codesMap];
+    } finally {
+        mealPricesconn?.release();
+    }
+}
+async function getDataSource(requiedetailsconn) {
+    try {
+        var codesMap = {};
+        let [data] = await requiedetailsconn.execute(`SELECT 
+            data_source
+            FROM KTAHV_require_details`
+        );
+
+        for (let i = 0; i < data.length; i++) {
+            let r = data[i];
+            codesMap[r.data_source] = true;
+        }
+        return ["DataSource", codesMap];
+    } finally {
+        requiedetailsconn?.release();
+    }
+}
+async function getClientType(requiedetailsconn) {
+    try {
+        var codesMap = {};
+        let [data] = await requiedetailsconn.execute(`SELECT 
+            client_type
+            FROM KTAHV_require_details`
+        );
+
+        for (let i = 0; i < data.length; i++) {
+            let r = data[i];
+            codesMap[r.client_type] = true;
+        }
+        return ["ClientType", codesMap];
+    } finally {
+        requiedetailsconn?.release();
+    }
+}
+async function getClientCategory(requiedetailsconn) {
+    try {
+        var codesMap = {};
+        let [data] = await requiedetailsconn.execute(`SELECT 
+            client_category
+            FROM KTAHV_require_details`
+        );
+
+        for (let i = 0; i < data.length; i++) {
+            let r = data[i];
+            if (r.client_category) {
+                codesMap[r.client_category] = true;
+            }
+        }
+        return ["ClientCategory", codesMap];
+    } finally {
+        requiedetailsconn?.release();
+    }
+}
+async function getPaymentTerms(requiedetailsconn) {
+    try {
+        var codesMap = {};
+        let [data] = await requiedetailsconn.execute(`SELECT 
+            payment_terms
+            FROM KTAHV_require_details`
+        );
+
+        for (let i = 0; i < data.length; i++) {
+            let r = data[i];
+            if (r.payment_terms) {
+                codesMap[r.payment_terms] = true;
+            }
+        }
+        return ["PaymentTerms", codesMap];
+    } finally {
+        requiedetailsconn?.release();
+    }
+}
+async function getChildRate(childRateconn) {
+    try {
+        var codesMap = {};
+        let [data] = await childRateconn.execute(`SELECT 
+            age_diff,
+            rate_include,
+            price_inr,
+            price_usd,
+            price_euro
+            FROM price_for_child_between_5_to_12_years_inr`
+        );
+        for (let i = 0; i < data.length; i++) {
+            let r = data[i];
+            if (r.price_inr && r.age_diff) {
+                codesMap[r.age_diff] = [r.price_inr, r.price_usd, r.price_euro];
+            }
+        }
+        return ["ChildRate", codesMap];
+    } finally {
+        childRateconn?.release();
+    }
+}
+async function getTravelAgentData(travelagentconn) {
+    try {
+        var codesMap = {};
+        let [data] = await travelagentconn.execute(`SELECT 
+            agency_id,
+            travel_agent_agency_name,
+            category,
+            contact_person_mobile_number,
+            email_id,
+            country_code,
+            stage2_commission_percent
+            FROM ktahv_travel_agent_registered_contact_database_fms`
+        );
+
+        for (let i = 0; i < data.length; i++) {
+            let r = data[i];
+            if (r.agency_id) {
+                codesMap[String(r.agency_id)] = [r.travel_agent_agency_name, r.contact_person_mobile_number, r.email_id, r.stage2_commission_percent, r.category, String(r.country_code).match(/[+-]?\d+/) ? String(r.country_code).match(/[+-]?\d+/)[0] : ""]
+            }
+
+        }
+        return ["ActiveTravelAgents", codesMap];
+    } finally {
+        travelagentconn?.release();
+    }
+}

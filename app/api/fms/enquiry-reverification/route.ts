@@ -1,0 +1,372 @@
+import { NextRequest, NextResponse } from "next/server"
+import { getPool } from "@/lib/db"
+
+let cachedFilters: { websites: string[], agents: string[], timestamp: number } | null = null;
+let indexChecked = false;
+const CACHE_DURATION = 1000 * 60 * 60; // 1 hour
+
+// Fetch all enquiries with search and filter parameters (optimized)
+export async function GET(req: NextRequest) {
+  let connection
+  try {
+    const { searchParams } = new URL(req.url)
+    const search = searchParams.get("search")
+    const from = searchParams.get("from")
+    const to = searchParams.get("to")
+    const company = searchParams.get("company")
+    const source = searchParams.get("source")
+    const website = searchParams.get("website")
+    const coldBy = searchParams.get("coldBy")
+    const skipFilters = searchParams.get("skipFilters") === "true"
+
+    const limit = parseInt(searchParams.get("limit") || "25", 10)
+    const page = parseInt(searchParams.get("page") || "1", 10)
+    const offset = (page - 1) * limit
+
+    const pool = await getPool()
+    connection = await pool.getConnection()
+
+    await connection.execute("SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED")
+
+    // Optimize: Create database indexes once if they are missing
+    if (!indexChecked) {
+      try {
+        await connection.execute("CREATE INDEX idx_generate_date_time ON fms_enquiry_cold_reverification_v2 (generate_date_time)")
+      } catch (e) { }
+      try {
+        await connection.execute("CREATE INDEX idx_company_belongs_to ON fms_enquiry_cold_reverification_v2 (company_belongs_to)")
+      } catch (e) { }
+      try {
+        await connection.execute("CREATE INDEX idx_website_name ON fms_enquiry_cold_reverification_v2 (website_name)")
+      } catch (e) { }
+      try {
+        await connection.execute("CREATE INDEX idx_cold_by_employee_name ON fms_enquiry_cold_reverification_v2 (cold_by_employee_name)")
+      } catch (e) { }
+      indexChecked = true
+    }
+
+    let websites: string[] = []
+    let agents: string[] = []
+
+    if (!skipFilters) {
+      if (cachedFilters && (Date.now() - cachedFilters.timestamp < CACHE_DURATION)) {
+        websites = cachedFilters.websites
+        agents = cachedFilters.agents
+      } else {
+        const [websitesRows]: any = await connection.execute(
+          "SELECT DISTINCT website_name FROM fms_enquiry_cold_reverification_v2 WHERE website_name IS NOT NULL AND website_name != '' ORDER BY website_name ASC"
+        )
+        const [agentsRows]: any = await connection.execute(
+          "SELECT DISTINCT cold_by_employee_name FROM fms_enquiry_cold_reverification_v2 WHERE cold_by_employee_name IS NOT NULL AND cold_by_employee_name != '' ORDER BY cold_by_employee_name ASC"
+        )
+        websites = websitesRows.map((r: any) => r.website_name)
+        agents = agentsRows.map((r: any) => r.cold_by_employee_name)
+        cachedFilters = { websites, agents, timestamp: Date.now() }
+      }
+    }
+
+    const conditions: string[] = []
+    const params: any[] = []
+
+    if (search) {
+      conditions.push("(lead_id LIKE ? OR name_of_client LIKE ? OR mobile LIKE ? OR email_id LIKE ? OR uid LIKE ?)")
+      const searchWildcard = `%${search}%`
+      params.push(searchWildcard, searchWildcard, searchWildcard, searchWildcard, searchWildcard)
+    }
+
+    if (from) {
+      conditions.push("generate_date_time >= ?")
+      params.push(`${from} 00:00:00`)
+    }
+    if (to) {
+      conditions.push("generate_date_time <= ?")
+      params.push(`${to} 23:59:59`)
+    }
+
+    if (company && company !== "ALL") {
+      conditions.push("company_belongs_to = ?")
+      params.push(company)
+    }
+
+    if (source && source !== "all") {
+      conditions.push("data_source LIKE ?")
+      params.push(`%${source}%`)
+    }
+
+    if (website && website !== "all") {
+      conditions.push("website_name = ?")
+      params.push(website)
+    }
+
+    if (coldBy && coldBy !== "all") {
+      conditions.push("cold_by_employee_name = ?")
+      params.push(coldBy)
+    }
+
+    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : ""
+
+    // Optimize: Single query to calculate all counts in one table scan
+    const countQuery = `
+      SELECT 
+        COUNT(*) as total,
+        SUM(CASE WHEN cold_remarks_by_sales_team IS NULL OR TRIM(cold_remarks_by_sales_team) = '' THEN 1 ELSE 0 END) as pending,
+        SUM(CASE WHEN cold_remarks_by_sales_team IS NOT NULL AND TRIM(cold_remarks_by_sales_team) != '' THEN 1 ELSE 0 END) as completed,
+        SUM(CASE WHEN LOWER(cold_done_in_calling_appsheet_or_in_dailer) = 'yes' THEN 1 ELSE 0 END) as appsheet
+      FROM fms_enquiry_cold_reverification_v2
+      ${whereClause}
+    `
+
+    const query = `
+      SELECT 
+        id,
+        generate_date_time,
+        enquiry_created_datetime,
+        lead_id,
+        name_of_client,
+        mobile,
+        email_id,
+        subjects,
+        notes,
+        ivr_url,
+        website_name,
+        data_source,
+        cold_by_employee_name,
+        cold_done_datetime,
+        cold_remarks_by_sales_team,
+        call_count_before_cold,
+        call_history_link,
+        cold_done_in_calling_appsheet_or_in_dailer,
+        uid,
+        company_belongs_to,
+        appsheet_call_recording_url,
+        planned_executive_verifier,
+        actual_executive_verifier,
+        time_delay_executive_verifier,
+        doer_executive_verifier,
+        verify_action_status_executive_verifier,
+        valid_reason_executive_verifier,
+        what_went_wrong_by_sales_team_executive_verifier,
+        overall_rating_out_of_10_executive_verifier,
+        suggested_solution_for_improvement_executive_verifier,
+        remarks_executive_verifier,
+        ht_created_to_executive_verifier_if_delay_status,
+        doer_executive_verifier_email_id,
+        hs_status_if_escalate_to_abhilash_sir_by_executive,
+        planned_senior_verifier,
+        actual_senior_verifier,
+        time_delay_senior_verifier,
+        doer_senior_verifier,
+        verify_action_status_senior_verifier,
+        valid_reason_senior_verifier,
+        what_went_wrong_by_sales_team_senior_verifier,
+        overall_rating_out_of_10_senior_verifier,
+        suggested_solution_for_improvement_senior_verifier,
+        remarks_senior_verifier,
+        ht_created_to_senior_verifier_if_delay_status,
+        whatsapp_alert_to_sales_person_if_reopen,
+        email_alert_to_sales_person_if_reopen,
+        doer_senior_verifier_email_id,
+        hs_status_if_escalate_to_abhilash_sir_by_senior,
+        transfer_to_user_fms_if_reopen
+      FROM fms_enquiry_cold_reverification_v2
+      ${whereClause}
+      ORDER BY generate_date_time DESC
+      LIMIT ? OFFSET ?
+    `
+
+    // Run count aggregation and paginated select concurrently in parallel
+    const [countResult, dataResult]: any = await Promise.all([
+      connection.execute(countQuery, params),
+      connection.execute(query, [...params, String(limit), String(offset)])
+    ])
+
+    const total = countResult[0][0]?.total || 0
+    const pending = Number(countResult[0][0]?.pending || 0)
+    const completed = Number(countResult[0][0]?.completed || 0)
+    const appsheet = Number(countResult[0][0]?.appsheet || 0)
+    const rows = dataResult[0]
+
+    return NextResponse.json({
+      success: true,
+      data: rows,
+      pagination: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit)
+      },
+      kpi: {
+        total,
+        pending,
+        completed,
+        appsheet
+      },
+      filters: skipFilters ? null : {
+        websites,
+        agents
+      }
+    })
+
+  } catch (error: any) {
+    console.error("[Enquiry API GET Error]:", error)
+    return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+  } finally {
+    if (connection) connection.release()
+  }
+}
+
+// Update reverification comments, notes, or status
+export async function POST(req: NextRequest) {
+  let connection
+  try {
+    const body = await req.json()
+
+    const pool = await getPool()
+    connection = await pool.getConnection()
+
+    if (body.isExecutiveVerify) {
+      const {
+        id,
+        doer_executive_verifier,
+        verify_action_status_executive_verifier,
+        valid_reason_executive_verifier,
+        what_went_wrong_by_sales_team_executive_verifier,
+        overall_rating_out_of_10_executive_verifier,
+        suggested_solution_for_improvement_executive_verifier,
+        remarks_executive_verifier,
+        ht_created_to_executive_verifier_if_delay_status,
+        doer_executive_verifier_email_id,
+        hs_status_if_escalate_to_abhilash_sir_by_executive,
+      } = body
+
+      if (!id) {
+        return NextResponse.json({ success: false, error: "Missing Enquiry ID" }, { status: 400 })
+      }
+
+      const query = `
+        UPDATE fms_enquiry_cold_reverification_v2
+        SET 
+          actual_executive_verifier = NOW(),
+          time_delay_executive_verifier = CASE 
+            WHEN planned_executive_verifier IS NOT NULL THEN 
+              CONCAT(
+                FLOOR(HOUR(TIMEDIFF(NOW(), planned_executive_verifier))), 'h ',
+                MINUTE(TIMEDIFF(NOW(), planned_executive_verifier)), 'm'
+              )
+            ELSE '0h 0m'
+          END,
+          doer_executive_verifier = ?,
+          verify_action_status_executive_verifier = ?,
+          valid_reason_executive_verifier = ?,
+          what_went_wrong_by_sales_team_executive_verifier = ?,
+          overall_rating_out_of_10_executive_verifier = ?,
+          suggested_solution_for_improvement_executive_verifier = ?,
+          remarks_executive_verifier = ?,
+          ht_created_to_executive_verifier_if_delay_status = ?,
+          doer_executive_verifier_email_id = ?,
+          hs_status_if_escalate_to_abhilash_sir_by_executive = ?
+        WHERE id = ?
+      `
+      const [result] = await connection.execute(query, [
+        doer_executive_verifier || "",
+        verify_action_status_executive_verifier || "",
+        valid_reason_executive_verifier || "",
+        what_went_wrong_by_sales_team_executive_verifier || "",
+        overall_rating_out_of_10_executive_verifier || null,
+        suggested_solution_for_improvement_executive_verifier || "",
+        remarks_executive_verifier || "",
+        ht_created_to_executive_verifier_if_delay_status || "",
+        doer_executive_verifier_email_id || "",
+        hs_status_if_escalate_to_abhilash_sir_by_executive || "",
+        id
+      ])
+
+      return NextResponse.json({
+        success: true,
+        message: "Executive verification saved successfully",
+        result
+      })
+    }
+
+    if (body.isSeniorVerify) {
+      const {
+        id,
+        doer_senior_verifier,
+        verify_action_status_senior_verifier,
+        valid_reason_senior_verifier,
+        what_went_wrong_by_sales_team_senior_verifier,
+        overall_rating_out_of_10_senior_verifier,
+        suggested_solution_for_improvement_senior_verifier,
+        remarks_senior_verifier,
+        ht_created_to_senior_verifier_if_delay_status,
+        whatsapp_alert_to_sales_person_if_reopen,
+        email_alert_to_sales_person_if_reopen,
+        doer_senior_verifier_email_id,
+        hs_status_if_escalate_to_abhilash_sir_by_senior,
+        transfer_to_user_fms_if_reopen
+      } = body
+
+      if (!id) {
+        return NextResponse.json({ success: false, error: "Missing Enquiry ID" }, { status: 400 })
+      }
+
+      const query = `
+        UPDATE fms_enquiry_cold_reverification_v2
+        SET 
+          actual_senior_verifier = NOW(),
+          time_delay_senior_verifier = CASE 
+            WHEN planned_senior_verifier IS NOT NULL THEN 
+              CONCAT(
+                FLOOR(HOUR(TIMEDIFF(NOW(), planned_senior_verifier))), 'h ',
+                MINUTE(TIMEDIFF(NOW(), planned_senior_verifier)), 'm'
+              )
+            ELSE '0h 0m'
+          END,
+          doer_senior_verifier = ?,
+          verify_action_status_senior_verifier = ?,
+          valid_reason_senior_verifier = ?,
+          what_went_wrong_by_sales_team_senior_verifier = ?,
+          overall_rating_out_of_10_senior_verifier = ?,
+          suggested_solution_for_improvement_senior_verifier = ?,
+          remarks_senior_verifier = ?,
+          ht_created_to_senior_verifier_if_delay_status = ?,
+          whatsapp_alert_to_sales_person_if_reopen = ?,
+          email_alert_to_sales_person_if_reopen = ?,
+          doer_senior_verifier_email_id = ?,
+          hs_status_if_escalate_to_abhilash_sir_by_senior = ?,
+          transfer_to_user_fms_if_reopen = ?
+        WHERE id = ?
+      `
+      const [result] = await connection.execute(query, [
+        doer_senior_verifier || "",
+        verify_action_status_senior_verifier || "",
+        valid_reason_senior_verifier || "",
+        what_went_wrong_by_sales_team_senior_verifier || "",
+        overall_rating_out_of_10_senior_verifier || null,
+        suggested_solution_for_improvement_senior_verifier || "",
+        remarks_senior_verifier || "",
+        ht_created_to_senior_verifier_if_delay_status || "",
+        whatsapp_alert_to_sales_person_if_reopen || "",
+        email_alert_to_sales_person_if_reopen || "",
+        doer_senior_verifier_email_id || "",
+        hs_status_if_escalate_to_abhilash_sir_by_senior || "",
+        transfer_to_user_fms_if_reopen || "",
+        id
+      ])
+
+      return NextResponse.json({
+        success: true,
+        message: "Senior verification saved successfully",
+        result
+      })
+    }
+
+    return NextResponse.json({ success: false, error: "Invalid action. Only Executive and Senior verification updates are allowed." }, { status: 400 })
+
+  } catch (error: any) {
+    console.error("[Enquiry API POST Error]:", error)
+    return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+  } finally {
+    if (connection) connection.release()
+  }
+}
