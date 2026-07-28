@@ -226,6 +226,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       url.searchParams.append("action", "getRolePermissions")
 
       const response = await fetch(url.toString())
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      const contentType = response.headers.get("content-type");
+      if (!contentType || !contentType.includes("application/json")) {
+        throw new TypeError("Response is not JSON");
+      }
       const data = await response.json()
 
       if (data.success && data.rolePermissions) {
