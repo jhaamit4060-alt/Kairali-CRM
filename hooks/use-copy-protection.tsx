@@ -76,7 +76,7 @@ const useCopyProtection = (options: ContentProtectionOptions = {}) => {
 
     // Handle keyboard shortcuts
     const handleKeyDown = (e: KeyboardEvent) => {
-      const key = e.key.toLowerCase();
+      const key = (e.key || "").toLowerCase();
       const ctrl = e.ctrlKey || e.metaKey;
 
       // Copy: Ctrl+C or Cmd+C
