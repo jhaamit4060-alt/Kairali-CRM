@@ -5,7 +5,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import OpenAI from 'openai'
 
-const openai          = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
+const openai          = new OpenAI({ apiKey: process.env.OPENAI_API_KEY || 'dummy-key-for-build' })
 const OPENAI_MAX_BYTES = 24 * 1024 * 1024
 const MAX_RETRIES      = 3
 
