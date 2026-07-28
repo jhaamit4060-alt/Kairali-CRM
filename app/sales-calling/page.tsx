@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useMemo, Fragment } from "react";
+import React, { useState, useMemo, Fragment, useEffect } from "react";
 import { Search, ChevronDown, ChevronRight, BarChart2, ChevronsUpDown, Download, Printer, UserCheck, Users, TrendingUp, DollarSign, Target, ArrowUpDown, ArrowUp, ArrowDown, BarChart3, TableIcon, Calendar } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -21,26 +21,12 @@ interface AgentRow {
   dataSourceUrl: string;
 }
 
-const DATA: AgentRow[] = [
-  { name: "Sadik Rehman", date: "06/05/2026", campaign: "1952069 - KTAHV SA", dialerLoginTime: "10:52:26", dialerLogoutTime: "13:56:38", dialerWorkTime: "2:46:47", dialerCallsDone: 30, dialerPausePct: 0.52, dialerWaitPct: 12.92, asFutureFU: 11, asAssignedDone: 5, asDayLimit: 344, asLoggedIn: true, asLoginTime: "09:23:03", asLogoutTime: "—", asFreshCalls: 14, asFUCalls: 8, asTotalCalls: 22, asUploadCount: 0, asTalkTime: "0:00:00", asAHT: 0, totalCallsDone: 30, nbdPending: 411, crrPending: 105, bufferPending: 0, freshPending: 156, fuPending: 0, totalPending: 156, convQtyOrder: 0, convAmtOrder: 0, convQtyInvoice: 0, convAmtInvoice: 0, conversionPct: 0, dataSourceUrl: "#" },
-  { name: "Pushpanshu Kumar", date: "06/05/2026", campaign: "1952069 - KTAHV SA", dialerLoginTime: "10:48:45", dialerLogoutTime: "13:56:38", dialerWorkTime: "2:17:20", dialerCallsDone: 35, dialerPausePct: 0.35, dialerWaitPct: 32.85, asFutureFU: 0, asAssignedDone: 0, asDayLimit: 268, asLoggedIn: true, asLoginTime: "09:37:46", asLogoutTime: "—", asFreshCalls: 1, asFUCalls: 0, asTotalCalls: 1, asUploadCount: 0, asTalkTime: "0:00:00", asAHT: 0, totalCallsDone: 35, nbdPending: 190, crrPending: 42, bufferPending: 0, freshPending: 232, fuPending: 0, totalPending: 232, convQtyOrder: 3, convAmtOrder: 50455, convQtyInvoice: 1, convAmtInvoice: 5550, conversionPct: 8.57, dataSourceUrl: "#" },
-  { name: "Zaki Ahmed", date: "06/05/2026", campaign: "3188322 - KAPPL SA", dialerLoginTime: "10:43:40", dialerLogoutTime: "13:05:52", dialerWorkTime: "1:56:52", dialerCallsDone: 15, dialerPausePct: 17.75, dialerWaitPct: 61.08, asFutureFU: 0, asAssignedDone: 0, asDayLimit: 492, asLoggedIn: true, asLoginTime: "09:30:43", asLogoutTime: "—", asFreshCalls: 0, asFUCalls: 2, asTotalCalls: 2, asUploadCount: 1, asTalkTime: "0:05:29", asAHT: 1752, totalCallsDone: 16, nbdPending: 0, crrPending: 8, bufferPending: 0, freshPending: 0, fuPending: 8, totalPending: 8, convQtyOrder: 0, convAmtOrder: 0, convQtyInvoice: 1, convAmtInvoice: 1752, conversionPct: 0, dataSourceUrl: "#" },
-  { name: "Levil Kumar", date: "06/05/2026", campaign: "1952069 - KTAHV SA", dialerLoginTime: "10:39:43", dialerLogoutTime: "13:56:38", dialerWorkTime: "2:17:32", dialerCallsDone: 32, dialerPausePct: 4.85, dialerWaitPct: 21.94, asFutureFU: 1, asAssignedDone: 0, asDayLimit: 160, asLoggedIn: true, asLoginTime: "10:19:38", asLogoutTime: "—", asFreshCalls: 0, asFUCalls: 0, asTotalCalls: 0, asUploadCount: 0, asTalkTime: "0:00:00", asAHT: 0, totalCallsDone: 32, nbdPending: 332, crrPending: 8, bufferPending: 0, freshPending: 340, fuPending: 0, totalPending: 340, convQtyOrder: 0, convAmtOrder: 0, convQtyInvoice: 0, convAmtInvoice: 0, conversionPct: 0, dataSourceUrl: "#" },
-  { name: "Vidisha Bahukhandi", date: "06/05/2026", campaign: "3188322 - KAPPL SA", dialerLoginTime: "10:39:38", dialerLogoutTime: "12:59:58", dialerWorkTime: "2:08:22", dialerCallsDone: 13, dialerPausePct: 1.99, dialerWaitPct: 74.89, asFutureFU: 2, asAssignedDone: 0, asDayLimit: 470, asLoggedIn: true, asLoginTime: "11:50:53", asLogoutTime: "—", asFreshCalls: 0, asFUCalls: 0, asTotalCalls: 0, asUploadCount: 0, asTalkTime: "0:00:00", asAHT: 470, totalCallsDone: 13, nbdPending: 23, crrPending: 7, bufferPending: 0, freshPending: 30, fuPending: 0, totalPending: 30, convQtyOrder: 2, convAmtOrder: 15938, convQtyInvoice: 1, convAmtInvoice: 470, conversionPct: 15.38, dataSourceUrl: "#" },
-  { name: "Pawan Kamra", date: "06/05/2026", campaign: "1952069 - KTAHV SA", dialerLoginTime: "—", dialerLogoutTime: "14:18:43", dialerWorkTime: "—", dialerCallsDone: 0, dialerPausePct: 0, dialerWaitPct: 0, asFutureFU: 0, asAssignedDone: 0, asDayLimit: 472, asLoggedIn: true, asLoginTime: "10:12:53", asLogoutTime: "—", asFreshCalls: 12, asFUCalls: 4, asTotalCalls: 16, asUploadCount: 0, asTalkTime: "0:00:00", asAHT: 0, totalCallsDone: 0, nbdPending: 25, crrPending: 3, bufferPending: 0, freshPending: 28, fuPending: 0, totalPending: 28, convQtyOrder: 0, convAmtOrder: 0, convQtyInvoice: 0, convAmtInvoice: 0, conversionPct: 0, dataSourceUrl: "#" },
-  { name: "Shona George", date: "06/05/2026", campaign: "1952069 - KTAHV SA", dialerLoginTime: "—", dialerLogoutTime: "14:18:43", dialerWorkTime: "—", dialerCallsDone: 0, dialerPausePct: 0, dialerWaitPct: 0, asFutureFU: 0, asAssignedDone: 0, asDayLimit: 500, asLoggedIn: false, asLoginTime: "—", asLogoutTime: "—", asFreshCalls: 0, asFUCalls: 0, asTotalCalls: 0, asUploadCount: 0, asTalkTime: "0:00:00", asAHT: 0, totalCallsDone: 0, nbdPending: 0, crrPending: 0, bufferPending: 0, freshPending: 0, fuPending: 0, totalPending: 0, convQtyOrder: 0, convAmtOrder: 0, convQtyInvoice: 0, convAmtInvoice: 0, conversionPct: 0, dataSourceUrl: "#" },
-  { name: "Bhuvaneshwari", date: "06/05/2026", campaign: "1952069 - KTAHV SA", dialerLoginTime: "—", dialerLogoutTime: "14:18:43", dialerWorkTime: "—", dialerCallsDone: 0, dialerPausePct: 0, dialerWaitPct: 0, asFutureFU: 0, asAssignedDone: 0, asDayLimit: 492, asLoggedIn: false, asLoginTime: "—", asLogoutTime: "—", asFreshCalls: 0, asFUCalls: 0, asTotalCalls: 0, asUploadCount: 0, asTalkTime: "0:00:00", asAHT: 0, totalCallsDone: 0, nbdPending: 0, crrPending: 0, bufferPending: 0, freshPending: 0, fuPending: 0, totalPending: 0, convQtyOrder: 0, convAmtOrder: 0, convQtyInvoice: 0, convAmtInvoice: 0, conversionPct: 0, dataSourceUrl: "#" },
-  { name: "Puneet Endlay", date: "06/05/2026", campaign: "1952069 - KTAHV SA", dialerLoginTime: "—", dialerLogoutTime: "14:18:43", dialerWorkTime: "—", dialerCallsDone: 0, dialerPausePct: 0, dialerWaitPct: 0, asFutureFU: 0, asAssignedDone: 0, asDayLimit: 500, asLoggedIn: false, asLoginTime: "—", asLogoutTime: "—", asFreshCalls: 0, asFUCalls: 0, asTotalCalls: 0, asUploadCount: 0, asTalkTime: "0:00:00", asAHT: 0, totalCallsDone: 0, nbdPending: 0, crrPending: 8, bufferPending: 0, freshPending: 0, fuPending: 8, totalPending: 8, convQtyOrder: 0, convAmtOrder: 0, convQtyInvoice: 1, convAmtInvoice: 16654, conversionPct: 0, dataSourceUrl: "#" },
-  { name: "Anjana Sharma", date: "06/05/2026", campaign: "1952069 - KTAHV SA", dialerLoginTime: "—", dialerLogoutTime: "14:18:43", dialerWorkTime: "—", dialerCallsDone: 0, dialerPausePct: 0, dialerWaitPct: 0, asFutureFU: 0, asAssignedDone: 0, asDayLimit: 484, asLoggedIn: false, asLoginTime: "—", asLogoutTime: "—", asFreshCalls: 0, asFUCalls: 0, asTotalCalls: 0, asUploadCount: 0, asTalkTime: "0:00:00", asAHT: 0, totalCallsDone: 0, nbdPending: 0, crrPending: 0, bufferPending: 0, freshPending: 0, fuPending: 0, totalPending: 0, convQtyOrder: 0, convAmtOrder: 0, convQtyInvoice: 0, convAmtInvoice: 0, conversionPct: 0, dataSourceUrl: "#" },
-  { name: "Harpal Singh", date: "06/05/2026", campaign: "1952069 - KTAHV SA", dialerLoginTime: "09:19:27", dialerLogoutTime: "14:18:43", dialerWorkTime: "—", dialerCallsDone: 7, dialerPausePct: 0, dialerWaitPct: 0, asFutureFU: 7, asAssignedDone: 0, asDayLimit: 67, asLoggedIn: true, asLoginTime: "09:19:27", asLogoutTime: "—", asFreshCalls: 7, asFUCalls: 11, asTotalCalls: 18, asUploadCount: 28, asTalkTime: "0:34:41", asAHT: 0, totalCallsDone: 28, nbdPending: 178, crrPending: 255, bufferPending: 16, freshPending: 0, fuPending: 0, totalPending: 433, convQtyOrder: 0, convAmtOrder: 0, convQtyInvoice: 0, convAmtInvoice: 0, conversionPct: 0, dataSourceUrl: "#" },
-  { name: "Sunaina Bali", date: "06/05/2026", campaign: "1952069 - KTAHV SA", dialerLoginTime: "—", dialerLogoutTime: "14:18:43", dialerWorkTime: "—", dialerCallsDone: 0, dialerPausePct: 0, dialerWaitPct: 0, asFutureFU: 0, asAssignedDone: 0, asDayLimit: 500, asLoggedIn: false, asLoginTime: "—", asLogoutTime: "—", asFreshCalls: 0, asFUCalls: 0, asTotalCalls: 0, asUploadCount: 0, asTalkTime: "0:00:00", asAHT: 0, totalCallsDone: 0, nbdPending: 0, crrPending: 0, bufferPending: 0, freshPending: 0, fuPending: 0, totalPending: 0, convQtyOrder: 0, convAmtOrder: 0, convQtyInvoice: 0, convAmtInvoice: 0, conversionPct: 0, dataSourceUrl: "#" },
-  { name: "Kavita", date: "06/05/2026", campaign: "1952069 - KTAHV SA", dialerLoginTime: "—", dialerLogoutTime: "14:18:43", dialerWorkTime: "—", dialerCallsDone: 0, dialerPausePct: 0, dialerWaitPct: 0, asFutureFU: 0, asAssignedDone: 0, asDayLimit: 500, asLoggedIn: false, asLoginTime: "—", asLogoutTime: "—", asFreshCalls: 0, asFUCalls: 0, asTotalCalls: 0, asUploadCount: 0, asTalkTime: "0:00:00", asAHT: 0, totalCallsDone: 0, nbdPending: 0, crrPending: 0, bufferPending: 0, freshPending: 0, fuPending: 0, totalPending: 0, convQtyOrder: 0, convAmtOrder: 0, convQtyInvoice: 0, convAmtInvoice: 0, conversionPct: 0, dataSourceUrl: "#" },
-];
+const DATA: AgentRow[] = [];
 
 function groupByDate(rows: AgentRow[]) { return rows.reduce((a, r) => { (a[r.date] = a[r.date] || []).push(r); return a; }, {} as Record<string, AgentRow[]>); }
 function parseTime(t: string): number { if (!t || t === "—" || t === "0:00:00") return 0; const p = t.split(":").map(Number); return p.length === 3 ? p[0] * 3600 + p[1] * 60 + p[2] : p[0] * 60 + (p[1] || 0); }
 function fmtTime(s: number): string { if (!s) return "0:00:00"; return `${Math.floor(s / 3600)}:${String(Math.floor((s % 3600) / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`; }
-const ALL_DATES = [...new Set(DATA.map(r => r.date))];
+const ALL_DATES: string[] = [];
 
 function downloadCSV(date: string, agents: AgentRow[]) {
   const headers = [
@@ -180,7 +166,7 @@ function FSel({ label, value, onChange, opts, placeholder = "Select..." }: { lab
   return (
     <div className="flex flex-col gap-1.5">
       <label className="text-xs font-medium uppercase tracking-wide text-slate-500">{label}</label>
-      <Select value={value} onValueChange={onChange}>
+      <Select value={value || "ALL"} onValueChange={(val) => onChange(val === "ALL" ? "" : val)}>
         <SelectTrigger className="h-10 w-full rounded-md border-gray-300 bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all">
           <SelectValue placeholder={placeholder} />
         </SelectTrigger>
@@ -211,11 +197,157 @@ function dtot(a: AgentRow[]) {
 }
 
 export default function App() {
-  const [expanded, setExpanded] = useState<Record<string, boolean>>(Object.fromEntries(ALL_DATES.map(d => [d, true])));
+  const [agentData, setAgentData] = useState<AgentRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [name, setName] = useState(""); const [dateRange, setDateRange] = useState("THIS_WEEK");
   const [customFrom, setCustomFrom] = useState(""); const [customTo, setCustomTo] = useState("");
   const [comp, setComp] = useState(""); const [login, setLogin] = useState("ALL");
   const [sortConfig, setSortConfig] = useState<{ field: string; direction: "asc" | "desc" }>({ field: "", direction: "asc" });
+
+  // Initialize expanded state when agentData is loaded
+  useEffect(() => {
+    if (agentData.length > 0) {
+      setExpanded(prev => {
+        const next = { ...prev };
+        agentData.forEach(r => {
+          if (next[r.date] === undefined) {
+            next[r.date] = true;
+          }
+        });
+        return next;
+      });
+    }
+  }, [agentData]);
+
+  // Fetch live API data on component mount
+  useEffect(() => {
+    let active = true;
+    const fetchData = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        const res = await fetch("/api/sales-calling");
+        if (!res.ok) {
+          throw new Error(`HTTP error! status: ${res.status}`);
+        }
+        const rawJson = await res.json();
+        console.log("Raw JSON received on client:", rawJson);
+        const list = rawJson && Array.isArray(rawJson.data) ? rawJson.data : (Array.isArray(rawJson) ? rawJson : []);
+
+        const parseNum = (val: any): number => {
+          if (val === null || val === undefined || val === "") return 0;
+          const parsed = parseFloat(String(val).replace(/[^0-9.-]/g, ""));
+          return isNaN(parsed) ? 0 : parsed;
+        };
+
+        const parseApiDateToDMY = (dateStr: any): string => {
+          if (!dateStr) return "—";
+          const cleanStr = String(dateStr).trim().split(" ")[0];
+
+          let day = 0, month = 0, year = 0;
+          if (cleanStr.includes("/")) {
+            const parts = cleanStr.split("/");
+            if (parts.length === 3) {
+              if (parts[2].length === 4) {
+                day = +parts[0];
+                month = +parts[1];
+                year = +parts[2];
+              } else if (parts[0].length === 4) {
+                year = +parts[0];
+                month = +parts[1];
+                day = +parts[2];
+              }
+            }
+          } else if (cleanStr.includes("-")) {
+            const parts = cleanStr.split("-");
+            if (parts.length === 3) {
+              if (parts[0].length === 4) {
+                year = +parts[0];
+                month = +parts[1];
+                day = +parts[2];
+              } else if (parts[2].length === 4) {
+                day = +parts[0];
+                month = +parts[1];
+                year = +parts[2];
+              }
+            }
+          }
+
+          if (day > 0 && month > 0 && year > 0) {
+            return `${String(day).padStart(2, "0")}/${String(month).padStart(2, "0")}/${year}`;
+          }
+
+          const d = new Date(dateStr);
+          if (!isNaN(d.getTime())) {
+            return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`;
+          }
+
+          return cleanStr || "—";
+        };
+
+        const mapped: AgentRow[] = list.map((item: any) => {
+          const itemDate = parseApiDateToDMY(item["Date"]);
+          const rawCampaign = item["Dialer - Last Loggedin Campaign"] || "";
+
+          return {
+            name: item["Name"] || "—",
+            date: itemDate,
+            campaign: rawCampaign || "—",
+            dialerLoginTime: item["Dialer - Login Time"] || "—",
+            dialerLogoutTime: item["Dialer - Logout Time"] || "—",
+            dialerWorkTime: item["Dialer - Total Work Time"] || "—",
+            dialerCallsDone: parseNum(item["Dialer - Total Calls Done"]),
+            dialerPausePct: parseNum(item["Actual Pause %"]),
+            dialerWaitPct: parseNum(item["Actual Wait %"]),
+            asFutureFU: parseNum(item["Appsheet - Total Future Follow Up"]),
+            asAssignedDone: parseNum(item["Appsheet - Total Assigned Done"]),
+            asDayLimit: parseNum(item["Appsheet - Per Day Assign Limit"]),
+            asLoggedIn: String(item["Appsheet - Today Login"]).toUpperCase() === "YES",
+            asLoginTime: item["Appsheet - Login time"] || "—",
+            asLogoutTime: item["Appsheet - Logout Time"] || "—",
+            asFreshCalls: parseNum(item["Appsheet - Calls Done (Fresh)"]),
+            asFUCalls: parseNum(item["Appsheet - Calls Done (Follow Up)"]),
+            asTotalCalls: parseNum(item["Appsheet - Total Calls Done"]),
+            asUploadCount: parseNum(item["Appsheet - Call Upload Count"]),
+            asTalkTime: item["Appsheet - Total Talk Time"] || "0:00:00",
+            asAHT: parseTime(item["Appsheet - Average Handling Time"] || "00:00:00"),
+            totalCallsDone: parseNum(item["Total Calls Done (Dialer+Appsheet)"]),
+            nbdPending: parseNum(item["NBD - Dialer - Pending Hooper Calls (Till Today)"]),
+            crrPending: parseNum(item["CRR - Dialer - Pending Hooper Calls (Till Today)"]),
+            bufferPending: parseNum(item["Pending Transfer to User or Dialer (Pending in Buffer)"]),
+            freshPending: parseNum(item["Appsheet - Fresh Calls Pending (Till Today)"]),
+            fuPending: parseNum(item["Appsheet - Followup Calls Pending(Till Today)"]),
+            totalPending: parseNum(item["Appsheet - Total Calls Pending (Till Today)"]),
+            convQtyOrder: parseNum(item["Coversion Quantity - Order Placed"]),
+            convAmtOrder: parseNum(item["Coversion Amount - Order Placed"]),
+            convQtyInvoice: parseNum(item["Coversion Quantity - Invoice Generated"]),
+            convAmtInvoice: parseNum(item["Coversion Amount - Invoice Generated"]),
+            conversionPct: parseNum(item["Conversion %"]),
+            dataSourceUrl: item["Data Source - Link"] || "#"
+          };
+        });
+
+        if (active) {
+          console.log("Fetched live data from local API proxy:", mapped);
+          setAgentData(mapped);
+          setLoading(false);
+        }
+      } catch (err: any) {
+        console.error("Failed to fetch data:", err);
+        if (active) {
+          setError(err.message || "Failed to fetch calling report data.");
+          setLoading(false);
+        }
+      }
+    };
+
+    fetchData();
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const clear = () => {
     setName(""); setDateRange("ALL"); setCustomFrom(""); setCustomTo(""); setComp(""); setLogin("ALL");
@@ -275,21 +407,50 @@ export default function App() {
 
   const rows = useMemo(() => {
     const { from, to } = getDateBounds();
-    let filtered = DATA.filter(r => {
-      if (!name || r.name.toLowerCase().includes(name.toLowerCase())) {
-        // date filter
-        if (dateRange !== "ALL") {
-          const rd = parseDMY(r.date);
-          if (!rd) return false;
-          if (from && rd < from) return false;
-          if (to && rd > to) return false;
+    console.log("Filtering rows. Date bounds:", { from, to }, "dateRange:", dateRange, "agentData length:", agentData.length);
+    let filtered = agentData.filter(r => {
+      const matchName = !name || r.name.toLowerCase().includes(name.toLowerCase());
+      let matchDate = true;
+      if (dateRange !== "ALL") {
+        const rd = parseDMY(r.date);
+        if (!rd) {
+          matchDate = false;
+        } else {
+          if (from && rd < from) matchDate = false;
+          if (to && rd > to) matchDate = false;
         }
-        if (comp && !r.campaign.includes(comp)) return false;
-        if (login !== "ALL" && (login === "YES" ? !r.asLoggedIn : r.asLoggedIn)) return false;
-        return true;
       }
-      return false;
+      let matchComp = true;
+      if (comp) {
+        if (comp === "KAPPL") {
+          matchComp = r.campaign.includes("KAPPL");
+        } else if (comp === "KTAHV") {
+          // Anything that doesn't contain KAPPL defaults to KTAHV in the UI
+          matchComp = !r.campaign.includes("KAPPL");
+        } else {
+          matchComp = r.campaign.includes(comp);
+        }
+      }
+
+      // Let's check login logic: 
+      // If login is "ALL", matches everything.
+      // If login is "YES", matches if r.asLoggedIn is true.
+      // If login is "NO", matches if r.asLoggedIn is false.
+      const matchLogin = login === "ALL" || (login === "YES" ? r.asLoggedIn : !r.asLoggedIn);
+
+      const isMatch = matchName && matchDate && matchComp && matchLogin;
+      if (!isMatch) {
+        console.log("Filtered out agent:", r.name, {
+          matchName,
+          matchDate,
+          matchComp,
+          matchLogin,
+          agentDetails: { date: r.date, campaign: r.campaign, asLoggedIn: r.asLoggedIn }
+        });
+      }
+      return isMatch;
     });
+    console.log("Filtered rows count before sort:", filtered.length);
 
     if (sortConfig.field) {
       filtered.sort((a, b) => {
@@ -321,9 +482,11 @@ export default function App() {
 
   const grouped = groupByDate(rows);
   const GT = dtot(rows);
-  const total = rows.length, ktahv = rows.filter(r => r.campaign.includes("KTAHV")).length, kappl = rows.filter(r => r.campaign.includes("KAPPL")).length;
-  const dialerK = rows.filter(r => r.campaign.includes("KTAHV")).reduce((s, r) => s + r.dialerCallsDone, 0);
+  const total = rows.length;
+  const kappl = rows.filter(r => r.campaign.includes("KAPPL")).length;
+  const ktahv = total - kappl;
   const dialerKA = rows.filter(r => r.campaign.includes("KAPPL")).reduce((s, r) => s + r.dialerCallsDone, 0);
+  const dialerK = rows.reduce((s, r) => s + r.dialerCallsDone, 0) - dialerKA;
   const p = (n: number, d: number) => d > 0 ? `${((n / d) * 100).toFixed(1)}%` : "0%";
   const inr = (n: number) => n > 0 ? `₹${n.toLocaleString("en-IN")}` : "—";
 
@@ -727,7 +890,7 @@ export default function App() {
                         <TD b="g" className="text-emerald-600">{r.convQtyInvoice > 0 ? r.convQtyInvoice : <span className="text-slate-300">—</span>}</TD>
                         <TD b="g" className="font-semibold text-emerald-700">{r.convAmtInvoice > 0 ? `₹${r.convAmtInvoice.toLocaleString("en-IN")}` : <span className="text-slate-300">—</span>}</TD>
                         <TD b="gE">{r.conversionPct > 0 ? <span className={`inline-flex px-1.5 py-0.5 rounded text-[9px] font-bold ${r.conversionPct >= 10 ? "bg-green-100 text-green-700" : r.conversionPct >= 5 ? "bg-yellow-100 text-yellow-700" : "bg-red-100 text-red-600"}`}>{r.conversionPct.toFixed(2)}%</span> : <span className="text-slate-300">—</span>}</TD>
-                        <TD><a href={r.dataSourceUrl} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:text-blue-700 text-[9px] underline">GAS ↗</a></TD>
+                        <TD><a href={r.dataSourceUrl} target="_blank" rel="noopener noreferrer" className="text-blue-700 hover:text-blue-700 text-[9px] underline">VIEW ↗</a></TD>
                       </tr>
                     ))}
                   </React.Fragment>
@@ -769,7 +932,9 @@ export default function App() {
                 <td className={GTC + " text-slate-500"}>—</td>
               </tr>
 
-              {rows.length === 0 && <tr><td colSpan={34} className="py-16 text-center text-slate-400 text-xs">No records match current filters</td></tr>}
+              {loading && <tr><td colSpan={34} className="py-16 text-center text-blue-600 font-semibold text-xs">Loading live data from API...</td></tr>}
+              {error && <tr><td colSpan={34} className="py-16 text-center text-red-500 font-semibold text-xs">Error loading data: {error}</td></tr>}
+              {!loading && !error && rows.length === 0 && <tr><td colSpan={34} className="py-16 text-center text-slate-400 text-xs">No records match current filters</td></tr>}
             </tbody>
           </table>
         </div>
