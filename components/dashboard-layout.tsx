@@ -56,6 +56,7 @@ import {
   Receipt,
   Info,
   StickyNote,
+  Sparkles,
 } from "lucide-react"
 import { useState, useEffect, useRef } from "react"
 import Link from "next/link"
@@ -166,6 +167,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
     { name: "Sales Report", href: "/sales/reports", icon: IndianRupee, permission: "sales_report.view" },
     { name: "Sales Calling Master", href: "/sales-calling", icon: PhoneCall, CalendarDays, permission: "sales_calling.view" },
     { name: "Leads Assignment", href: "/leads/assign", icon: Shuffle, permission: "leads.view" },
+    { name: "AI Deal Assistant", href: "/deal-assistant", icon: Sparkles, permission: "deal_assistant.view" },
     // { name: "K-Serve Billing Auditor", href: "/ksereve-billing-auditer", icon: FileText, permission: "bill_fms.view" },
     { name: "AI Voice Lead Qual.", icon: Phone, permission: "ai_voice_menu.view" },
     { name: "KTAHV Accounts Tracker", href: "/accounts-tracker", icon: Receipt, permission: "accounts_tracker.view" },
@@ -442,7 +444,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   const getIconColor = (itemName: string) => {
     const colorMap: { [key: string]: string } = {
       Dashboard: "text-indigo-500", "User Management": "text-orange-500", "Lead Management": "text-blue-500",
-      "Lead Assignment": "text-green-500", "Marketing Funnel": "text-purple-500", "Sales Conversion Report": "text-orange-500",
+      "Lead Assignment": "text-green-500", "AI Deal Assistant": "text-violet-500", "Marketing Funnel": "text-purple-500", "Sales Conversion Report": "text-orange-500",
       "Calling Panel": "text-green-500", "Sales Report": "text-orange-500", "Calls Report": "text-green-500",
       Performance: "text-red-500", Reports: "text-purple-500", "Help Desk": "text-gray-500",
       "Sales Management": "text-orange-500", "Partner Onboarding System": "text-emerald-600",

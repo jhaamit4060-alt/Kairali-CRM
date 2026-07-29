@@ -155,6 +155,14 @@ const allCards: QuickCard[] = [
   },
   {
     type: "other",
+    name: "AI Deal Assistant",
+    href: "/deal-assistant",
+    icon: "✨",
+    desc: "Track stalled leads & auto-draft follow-ups",
+    permission: "deal_assistant.view",
+  },
+  {
+    type: "other",
     name: "Marketing Funnel",
     href: "/marketing-funnel",
     icon: "📈",
