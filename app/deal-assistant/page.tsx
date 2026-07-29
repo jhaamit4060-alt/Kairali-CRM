@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useEffect, useMemo } from "react"
+import React, { useState, useEffect, useMemo, useRef, useDeferredValue } from "react"
 import { useRouter } from "next/navigation"
 import { DashboardLayout } from "@/components/dashboard-layout"
 import { Button } from "@/components/ui/button"
@@ -30,7 +30,10 @@ import {
   AlertTriangle,
   ArrowUpDown,
   ArrowUp,
-  ArrowDown
+  ArrowDown,
+  Mail,
+  MessageCircleMore,
+  RefreshCw,
 } from "lucide-react"
 
 interface StalledLead {
@@ -41,13 +44,48 @@ interface StalledLead {
   package_interested: string
   assigned_sales_rep: string
   assigned_date: string
-  stage: 'assigned' | 'contacted' | 'negotiating'
+  stage: 'new' | 'qualified' | 'proposal_sent' | 'negotiating' | 'payment_pending' | 'won' | 'lost'
   last_contact_date: string
   daysStalled: number
   quote_amount: number | null
   notes: string
   last_attempt_unreachable: boolean
   company: string
+  pipeline_stage?: string
+  health_score?: number
+  next_best_action?: string
+}
+
+type DraftMode = "followup" | "summary" | "next_action"
+
+type DraftCacheEntry = {
+  message: string
+  source?: string
+  fetchedAt: number
+}
+
+const STAGE_META: Record<string, { label: string; badge: string }> = {
+  new: { label: "New", badge: "bg-sky-100 text-sky-800 border-sky-200" },
+  qualified: { label: "Qualified", badge: "bg-violet-100 text-violet-800 border-violet-200" },
+  proposal_sent: { label: "Proposal Sent", badge: "bg-amber-100 text-amber-800 border-amber-200" },
+  negotiating: { label: "Negotiation", badge: "bg-orange-100 text-orange-800 border-orange-200" },
+  payment_pending: { label: "Payment Pending", badge: "bg-rose-100 text-rose-800 border-rose-200" },
+  won: { label: "Won", badge: "bg-emerald-100 text-emerald-800 border-emerald-200" },
+  lost: { label: "Lost", badge: "bg-slate-200 text-slate-800 border-slate-300" },
+}
+
+function getStageMeta(stage: string) {
+  return STAGE_META[stage] || STAGE_META.new
+}
+
+function getBrandLabel(company?: string): string {
+  const normalized = String(company || "").toUpperCase()
+  if (normalized === "VILLARAAG") return "Villa RAAG"
+  return "Kairali Ayurvedic Group"
+}
+
+function getAssistantDisplayName(user?: { name?: string | null; email?: string | null } | null): string {
+  return user?.name?.trim() || user?.email?.trim() || "Kairali Team"
 }
 
 // Parse "DD/MM/YYYY HH:MM:SS" — JS new Date() misreads DD as MM for this format
@@ -85,18 +123,26 @@ function formatCRMDateToDDMMYYYY(dateStr: string | null | undefined): string {
 export default function AIDealClosingAssistantPage() {
   const { user, isLoading: authLoading } = useAuth()
   const router = useRouter()
+  const requestCacheRef = useRef<Map<string, { stalledLeads: StalledLead[]; stats: any; fetchedAt: number }>>(new Map())
+  const draftCacheRef = useRef<Map<string, DraftCacheEntry>>(new Map())
+  const stalledDealsAbortRef = useRef<AbortController | null>(null)
 
   // State variables
   const [stalledLeads, setStalledLeads] = useState<StalledLead[]>([])
   const [stats, setStats] = useState<any>({
     totalStalled: 0,
-    stageCounts: { assigned: 0, contacted: 0, negotiating: 0 },
-    totalPipelineValueAtRisk: 0
+    stageCounts: { new: 0, qualified: 0, proposal_sent: 0, negotiating: 0, payment_pending: 0, won: 0, lost: 0 },
+    pipelineCounts: { new: 0, qualified: 0, proposal_sent: 0, negotiating: 0, payment_pending: 0, won: 0, lost: 0 },
+    totalPipelineValueAtRisk: 0,
+    averageHealthScore: 0,
+    pipelineCountsTotal: 0,
+    summary: ""
   })
   
   const [searchInput, setSearchInput] = useState("")
   const [stageFilter, setStageFilter] = useState("all")
   const [selectedCompany, setSelectedCompany] = useState("ALL")
+  const deferredSearchInput = useDeferredValue(searchInput)
   
   // Loading states
   const [isInitialLoad, setIsInitialLoad] = useState(true)
@@ -108,6 +154,8 @@ export default function AIDealClosingAssistantPage() {
   const [generatedMessage, setGeneratedMessage] = useState("")
   const [isGenerating, setIsGenerating] = useState(false)
   const [copied, setCopied] = useState(false)
+  const [draftMode, setDraftMode] = useState<DraftMode>("followup")
+  const [markingLeadId, setMarkingLeadId] = useState<string | null>(null)
 
   // Date Filter states matching app/leads/assign/page.tsx format
   const [dateFilter, setDateFilter] = useState<
@@ -126,6 +174,9 @@ export default function AIDealClosingAssistantPage() {
   const [currentPage, setCurrentPage] = useState(1)
   const [itemsPerPage, setItemsPerPage] = useState(10)
   const [gotoPage, setGotoPage] = useState("")
+
+  const assistantName = getAssistantDisplayName(user)
+  const activeBrandLabel = getBrandLabel(selectedCompany)
 
   // Helper to format date in IST
   const formatIST = (date: Date): string => {
@@ -241,35 +292,69 @@ export default function AIDealClosingAssistantPage() {
 
   // Fetch stalled deals from DB
   const fetchStalledDeals = async (from = startDate, to = endDate, comp = selectedCompany, silent = false) => {
+    const cacheKey = `${from || ""}|${to || ""}|${comp || "ALL"}`
+    const cached = requestCacheRef.current.get(cacheKey)
+    const cacheAgeMs = cached ? Date.now() - cached.fetchedAt : Number.POSITIVE_INFINITY
+    const isCacheFresh = cacheAgeMs < 5 * 60 * 1000
+
+    if (isCacheFresh && cached) {
+      setError(null)
+      setStalledLeads(cached.stalledLeads)
+      setStats(cached.stats)
+      setCurrentPage(1)
+      setIsInitialLoad(false)
+      setIsFilterFetching(false)
+      return
+    }
+
     try {
       if (!silent) {
         setIsFilterFetching(true)
       }
       setError(null)
+
+      stalledDealsAbortRef.current?.abort()
+      const controller = new AbortController()
+      stalledDealsAbortRef.current = controller
       
       const params = new URLSearchParams()
       if (from) params.set('from', from)
       if (to) params.set('to', to)
       if (comp) params.set('company', comp)
-      params.set('t', String(Date.now()))
 
-      const res = await fetch(`/api/stalled-deals?${params.toString()}`)
+      const res = await fetch(`/api/stalled-deals?${params.toString()}`, { signal: controller.signal })
       const json = await res.json()
       
       if (json.success) {
         setStalledLeads(json.stalledDeals || [])
-        setStats(json.stats || {
+        const nextStats = json.stats || {
           totalStalled: 0,
-          stageCounts: { assigned: 0, contacted: 0, negotiating: 0 },
-          totalPipelineValueAtRisk: 0
+          stageCounts: { new: 0, qualified: 0, proposal_sent: 0, negotiating: 0, payment_pending: 0, won: 0, lost: 0 },
+          pipelineCounts: { new: 0, qualified: 0, proposal_sent: 0, negotiating: 0, payment_pending: 0, won: 0, lost: 0 },
+          totalPipelineValueAtRisk: 0,
+          averageHealthScore: 0,
+          pipelineCountsTotal: 0,
+          summary: ""
+        }
+        setStats(nextStats)
+        requestCacheRef.current.set(cacheKey, {
+          stalledLeads: json.stalledDeals || [],
+          stats: nextStats,
+          fetchedAt: Date.now()
         })
         setCurrentPage(1) // Reset to page 1 on filter
       } else {
         setError(json.error || "Failed to load stalled deals")
       }
     } catch (err: any) {
+      if (err?.name === "AbortError") {
+        return
+      }
       setError(err.message || "An unexpected error occurred while fetching data.")
     } finally {
+      if (stalledDealsAbortRef.current) {
+        stalledDealsAbortRef.current = null
+      }
       setIsInitialLoad(false)
       setIsFilterFetching(false)
     }
@@ -285,6 +370,7 @@ export default function AIDealClosingAssistantPage() {
   // Mark lead as followed up
   const handleMarkFollowedUp = async (leadId: string, customNotes = "Sales representative followed up manually") => {
     try {
+      setMarkingLeadId(leadId)
       const res = await fetch("/api/mark-followed-up", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -296,21 +382,48 @@ export default function AIDealClosingAssistantPage() {
       })
       const json = await res.json()
       if (json.success) {
+        requestCacheRef.current.clear()
+        draftCacheRef.current.clear()
         await fetchStalledDeals(startDate, endDate, selectedCompany, true)
       } else {
         alert(json.error || "Failed to log follow-up action.")
       }
     } catch (err: any) {
       alert("Error logging follow-up: " + err.message)
+    } finally {
+      setMarkingLeadId(null)
     }
   }
 
-  // Generate AI Follow-up Message
-  const handleGenerateMessage = async (lead: StalledLead) => {
+  // Generate AI draft content
+  const buildDraftCacheKey = (lead: StalledLead, mode: DraftMode) => [
+    lead.id,
+    mode,
+    lead.stage,
+    lead.package_interested || "",
+    lead.quote_amount ?? "",
+    lead.daysStalled,
+    lead.notes || "",
+    assistantName,
+    lead.assigned_sales_rep || "",
+  ].join("|")
+
+  const handleGenerateMessage = async (lead: StalledLead, mode: DraftMode = "followup", forceRegenerate = false) => {
     setSelectedLead(lead)
+    setDraftMode(mode)
+    setCopied(false)
+    const cacheKey = buildDraftCacheKey(lead, mode)
+    const cachedDraft = draftCacheRef.current.get(cacheKey)
+    const isFresh = cachedDraft && Date.now() - cachedDraft.fetchedAt < 12 * 60 * 60 * 1000
+
+    if (isFresh && !forceRegenerate) {
+      setGeneratedMessage(cachedDraft.message)
+      setIsGenerating(false)
+      return
+    }
+
     setIsGenerating(true)
     setGeneratedMessage("")
-    setCopied(false)
     const controller = new AbortController()
     const timeoutId = window.setTimeout(() => controller.abort(), 30000)
 
@@ -320,20 +433,28 @@ export default function AIDealClosingAssistantPage() {
         headers: { "Content-Type": "application/json" },
         signal: controller.signal,
         body: JSON.stringify({
+          mode,
+          regenerate: forceRegenerate,
           name: lead.name,
           stage: lead.stage,
           package_interested: lead.package_interested,
           quote_amount: lead.quote_amount,
           notes: lead.notes,
           daysStalled: lead.daysStalled,
-          assigned_sales_rep: lead.assigned_sales_rep
+          assigned_sales_rep: lead.assigned_sales_rep,
+          representative_name: assistantName,
         })
       })
       const json = await res.json()
       if (json.success) {
         setGeneratedMessage(json.message)
+        draftCacheRef.current.set(cacheKey, {
+          message: json.message,
+          source: json.source || "gemini",
+          fetchedAt: Date.now(),
+        })
       } else {
-        setGeneratedMessage("Error: " + (json.error || "Failed to draft AI message."))
+        setGeneratedMessage("Error: " + (json.error || "Failed to draft AI content."))
       }
     } catch (err: any) {
       const isAbort = err?.name === "AbortError"
@@ -355,10 +476,61 @@ export default function AIDealClosingAssistantPage() {
       setCopied(true)
       setTimeout(() => setCopied(false), 2000)
       
-      if (selectedLead) {
+      if (selectedLead && draftMode === "followup") {
         handleMarkFollowedUp(selectedLead.id, `AI-Generated Follow-up message copied to clipboard. Content: "${generatedMessage.substring(0, 50)}..."`)
       }
     }
+  }
+
+  const handleRegenerateDraft = () => {
+    if (selectedLead) {
+      draftCacheRef.current.delete(buildDraftCacheKey(selectedLead, draftMode))
+      handleGenerateMessage(selectedLead, draftMode, true)
+    }
+  }
+
+  const handleEmailDraft = () => {
+    if (!selectedLead || !generatedMessage) return
+    const recipient = selectedLead.email || window.prompt("Enter recipient email address")?.trim()
+    if (!recipient) return
+
+    const confirmed = window.confirm(`Open an email draft for ${recipient}?`)
+    if (!confirmed) return
+
+    const subject = `Deal update for ${selectedLead.name} - ${getStageMeta(selectedLead.pipeline_stage || selectedLead.stage).label}`
+    const body = `${generatedMessage}\n\nRegards,\n${assistantName}\n${activeBrandLabel}`
+    const mailtoUrl = `mailto:${encodeURIComponent(recipient)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
+    window.open(mailtoUrl, "_blank", "noopener,noreferrer")
+  }
+
+  const handleWhatsAppDraft = async () => {
+    if (!selectedLead) return
+
+    let messageToSend = generatedMessage
+    if (draftMode !== "followup") {
+      const followupCacheKey = buildDraftCacheKey(selectedLead, "followup")
+      const cachedFollowup = draftCacheRef.current.get(followupCacheKey)
+      const isFreshFollowup = cachedFollowup && Date.now() - cachedFollowup.fetchedAt < 12 * 60 * 60 * 1000
+
+      if (isFreshFollowup && cachedFollowup) {
+        messageToSend = cachedFollowup.message
+      } else {
+        await handleGenerateMessage(selectedLead, "followup")
+        const generatedFollowup = draftCacheRef.current.get(followupCacheKey)
+        messageToSend = generatedFollowup?.message || ""
+      }
+    }
+
+    if (!messageToSend) return
+
+    const phone = selectedLead.phone?.replace(/\D/g, "") || window.prompt("Enter WhatsApp number")?.replace(/\D/g, "")
+    if (!phone) return
+
+    const confirmed = window.confirm(`Open WhatsApp draft for ${phone}?`)
+    if (!confirmed) return
+
+    const text = `${messageToSend}\n\n${assistantName} · ${activeBrandLabel}`
+    window.open(`https://wa.me/${phone}?text=${encodeURIComponent(text)}`, "_blank", "noopener,noreferrer")
   }
 
   // Sorting helpers
@@ -391,8 +563,8 @@ export default function AIDealClosingAssistantPage() {
       if (stageFilter !== "all" && lead.stage !== stageFilter) return false
       
       // Search filter
-      if (searchInput) {
-        const q = searchInput.trim().toLowerCase()
+      if (deferredSearchInput) {
+        const q = deferredSearchInput.trim().toLowerCase()
         const matchesId = lead.id?.toLowerCase().includes(q)
         const matchesName = lead.name?.toLowerCase().includes(q)
         const matchesPhone = lead.phone?.includes(q)
@@ -430,13 +602,16 @@ export default function AIDealClosingAssistantPage() {
     }
 
     return result
-  }, [stalledLeads, stageFilter, searchInput, sortField, sortDirection])
+  }, [stalledLeads, stageFilter, deferredSearchInput, sortField, sortDirection])
 
   // Pagination calculation
   const totalEntries = filteredLeads.length
   const totalPages = Math.max(1, Math.ceil(totalEntries / itemsPerPage))
   const startIndex = (currentPage - 1) * itemsPerPage
   const endIndex = Math.min(startIndex + itemsPerPage, totalEntries)
+  const totalValueAtRisk = useMemo(() => {
+    return filteredLeads.reduce((acc, lead) => acc + (lead.quote_amount || 0), 0)
+  }, [filteredLeads])
   const paginatedLeads = useMemo(() => {
     return filteredLeads.slice(startIndex, endIndex)
   }, [filteredLeads, startIndex, endIndex])
@@ -489,6 +664,9 @@ export default function AIDealClosingAssistantPage() {
                     <p className="text-sm sm:text-base lg:text-lg text-white/90 mt-1 sm:mt-2 font-medium">
                       Track stalled leads, analyze objection logs, and auto-draft tailor-made follow-ups.
                     </p>
+                    <p className="text-xs sm:text-sm text-white/80 mt-2 font-medium">
+                      {activeBrandLabel} · Personalized by {assistantName}
+                    </p>
                   </div>
                 </div>
               </div>
@@ -497,10 +675,13 @@ export default function AIDealClosingAssistantPage() {
               <div className="flex w-full lg:w-auto justify-start lg:justify-end">
                 <div className="w-full sm:w-auto text-left sm:text-right bg-white/10 backdrop-blur-sm rounded-lg p-3 sm:p-4 border border-white/20">
                   <p className="text-xs uppercase tracking-wide text-white/70 font-semibold mb-1">
-                    Total Stalled
+                    Total Leads
                   </p>
                   <p className="text-3xl sm:text-4xl font-bold text-white tabular-nums">
                     {totalEntries}
+                  </p>
+                  <p className="text-[11px] text-white/70 mt-1">
+                    AI-ready stalled pipeline
                   </p>
                 </div>
               </div>
@@ -615,9 +796,13 @@ export default function AIDealClosingAssistantPage() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">All Stages</SelectItem>
-                      <SelectItem value="assigned">Assigned</SelectItem>
-                      <SelectItem value="contacted">Contacted</SelectItem>
+                      <SelectItem value="new">New</SelectItem>
+                      <SelectItem value="qualified">Qualified</SelectItem>
+                      <SelectItem value="proposal_sent">Proposal Sent</SelectItem>
                       <SelectItem value="negotiating">Negotiating</SelectItem>
+                      <SelectItem value="payment_pending">Payment Pending</SelectItem>
+                      <SelectItem value="won">Won</SelectItem>
+                      <SelectItem value="lost">Lost</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -666,11 +851,34 @@ export default function AIDealClosingAssistantPage() {
             </div>
             <div>
               <h4 className="text-sm font-bold text-slate-700 uppercase tracking-wide">Key Performance Indicators</h4>
-              <p className="text-xs text-slate-500">Overview of stalled lead distributions and pipeline values</p>
+              <p className="text-xs text-slate-500">Overview of stalled lead distributions, pipeline health, and value at risk</p>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-5 gap-4 sm:gap-6">
+          <Card className="mb-4 border border-slate-200 bg-gradient-to-r from-slate-50 to-blue-50 p-4 shadow-sm">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">AI Deal Summary</p>
+                <p className="mt-1 text-sm text-slate-700">{stats.summary || "Loading pipeline summary..."}</p>
+              </div>
+              <div className="flex flex-wrap gap-3 text-xs">
+                <span className="rounded-full bg-white px-3 py-1 font-semibold text-slate-700 border border-slate-200">
+                  Avg Health: {stats.averageHealthScore || 0}/100
+                </span>
+                <span className="rounded-full bg-white px-3 py-1 font-semibold text-slate-700 border border-slate-200">
+                  Pipeline Total: {stats.pipelineCountsTotal || 0}
+                </span>
+                <span className="rounded-full bg-white px-3 py-1 font-semibold text-slate-700 border border-slate-200">
+                  Won: {stats.pipelineCounts?.won || 0}
+                </span>
+                <span className="rounded-full bg-white px-3 py-1 font-semibold text-slate-700 border border-slate-200">
+                  Lost: {stats.pipelineCounts?.lost || 0}
+                </span>
+              </div>
+            </div>
+          </Card>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-6 gap-4 sm:gap-6">
             
             {/* Total Stalled */}
             <Card className="bg-gradient-to-br from-blue-50 via-blue-100 to-blue-200 border-2 border-blue-300 shadow-md hover:shadow-lg transition-shadow p-5 rounded-xl">
@@ -689,19 +897,17 @@ export default function AIDealClosingAssistantPage() {
               </div>
             </Card>
 
-            {/* Assigned Stalls */}
+            {/* New Leads */}
             <Card className="bg-gradient-to-br from-green-50 via-green-100 to-green-200 border-2 border-green-300 shadow-md hover:shadow-lg transition-shadow p-5 rounded-xl">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-xs font-semibold text-green-700 uppercase tracking-wide mb-1">
-                    Assigned Stalls
+                    New Leads
                   </p>
                   <p className="text-3xl font-extrabold text-green-900 mt-2">
-                    {filteredLeads.filter(l => l.stage === 'assigned').length}
+                    {stats.pipelineCounts?.new || 0}
                   </p>
-                  <p className="text-xs font-medium text-green-700 mt-1">
-                    5+ Days
-                  </p>
+                  <p className="text-xs font-medium text-green-700 mt-1">Pipeline status</p>
                 </div>
                 <div className="w-14 h-14 rounded-full bg-gradient-to-br from-green-500 to-green-600 flex items-center justify-center shadow-lg">
                   <span className="text-white font-bold text-xl">A</span>
@@ -709,41 +915,55 @@ export default function AIDealClosingAssistantPage() {
               </div>
             </Card>
 
-            {/* Contacted Stalls */}
-            <Card className="bg-gradient-to-br from-amber-50 via-yellow-50 to-amber-100 border-2 border-amber-300 shadow-md hover:shadow-lg transition-shadow p-5 rounded-xl">
+            {/* Qualified Leads */}
+            <Card className="bg-gradient-to-br from-violet-50 via-violet-100 to-violet-200 border-2 border-violet-300 shadow-md hover:shadow-lg transition-shadow p-5 rounded-xl">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-xs font-semibold text-amber-700 uppercase tracking-wide mb-1">
-                    Contacted Stalls
+                  <p className="text-xs font-semibold text-violet-700 uppercase tracking-wide mb-1">
+                    Qualified Leads
                   </p>
-                  <p className="text-3xl font-extrabold text-amber-900 mt-2">
-                    {filteredLeads.filter(l => l.stage === 'contacted').length}
+                  <p className="text-3xl font-extrabold text-violet-900 mt-2">
+                    {stats.pipelineCounts?.qualified || 0}
                   </p>
-                  <p className="text-xs font-medium text-amber-700 mt-1">
-                    3+ Days
-                  </p>
+                  <p className="text-xs font-medium text-violet-700 mt-1">Pipeline status</p>
                 </div>
-                <div className="w-14 h-14 rounded-full bg-gradient-to-br from-amber-500 to-yellow-600 flex items-center justify-center shadow-lg">
-                  <span className="text-white font-bold text-xl">C</span>
+                <div className="w-14 h-14 rounded-full bg-gradient-to-br from-violet-500 to-violet-600 flex items-center justify-center shadow-lg">
+                  <span className="text-white font-bold text-xl">Q</span>
                 </div>
               </div>
             </Card>
 
-            {/* Negotiating Stalls */}
-            <Card className="bg-gradient-to-br from-red-50 via-red-100 to-red-200 border-2 border-red-300 shadow-md hover:shadow-lg transition-shadow p-5 rounded-xl">
+            {/* Proposal Sent */}
+            <Card className="bg-gradient-to-br from-amber-50 via-yellow-50 to-amber-100 border-2 border-amber-300 shadow-md hover:shadow-lg transition-shadow p-5 rounded-xl">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-xs font-semibold text-red-700 uppercase tracking-wide mb-1">
-                    Negotiating Stalls
+                  <p className="text-xs font-semibold text-amber-700 uppercase tracking-wide mb-1">
+                    Proposal Sent
                   </p>
-                  <p className="text-3xl font-extrabold text-red-900 mt-2">
-                    {filteredLeads.filter(l => l.stage === 'negotiating').length}
+                  <p className="text-3xl font-extrabold text-amber-900 mt-2">
+                    {stats.pipelineCounts?.proposal_sent || 0}
                   </p>
-                  <p className="text-xs font-medium text-red-700 mt-1">
-                    4+ Days
-                  </p>
+                  <p className="text-xs font-medium text-amber-700 mt-1">Pipeline status</p>
                 </div>
-                <div className="w-14 h-14 rounded-full bg-gradient-to-br from-red-500 to-red-600 flex items-center justify-center shadow-lg">
+                <div className="w-14 h-14 rounded-full bg-gradient-to-br from-amber-500 to-yellow-600 flex items-center justify-center shadow-lg">
+                  <span className="text-white font-bold text-xl">P</span>
+                </div>
+              </div>
+            </Card>
+
+            {/* Negotiating */}
+            <Card className="bg-gradient-to-br from-orange-50 via-orange-100 to-orange-200 border-2 border-orange-300 shadow-md hover:shadow-lg transition-shadow p-5 rounded-xl">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-semibold text-orange-700 uppercase tracking-wide mb-1">
+                    Negotiating
+                  </p>
+                  <p className="text-3xl font-extrabold text-orange-900 mt-2">
+                    {stats.pipelineCounts?.negotiating || 0}
+                  </p>
+                  <p className="text-xs font-medium text-orange-700 mt-1">Pipeline status</p>
+                </div>
+                <div className="w-14 h-14 rounded-full bg-gradient-to-br from-orange-500 to-orange-600 flex items-center justify-center shadow-lg">
                   <span className="text-white font-bold text-xl">N</span>
                 </div>
               </div>
@@ -982,9 +1202,9 @@ export default function AIDealClosingAssistantPage() {
                         {/* Stage */}
                         <td className="px-4 py-3 border-r border-slate-100">
                           <div className="flex flex-col gap-1">
-                            {lead.stage === 'assigned' && <Badge className="bg-blue-100 text-blue-800 border-blue-200">Assigned</Badge>}
-                            {lead.stage === 'contacted' && <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200">Contacted</Badge>}
-                            {lead.stage === 'negotiating' && <Badge className="bg-amber-100 text-amber-800 border-amber-200">Negotiating</Badge>}
+                            <Badge className={getStageMeta(lead.stage).badge}>
+                              {getStageMeta(lead.stage).label}
+                            </Badge>
                             
                             {lead.last_attempt_unreachable && (
                               <div className="flex items-center gap-1 text-[10px] text-red-600 font-semibold mt-0.5">
@@ -1001,6 +1221,11 @@ export default function AIDealClosingAssistantPage() {
                             <div className="text-[10px] text-slate-400">
                               Since {formatCRMDateToDDMMYYYY(lead.last_contact_date)}
                             </div>
+                            {typeof lead.health_score === "number" && (
+                              <div className="mt-1 inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-700">
+                                Health {lead.health_score}/100
+                              </div>
+                            )}
                           </div>
                         </td>
 
@@ -1011,9 +1236,16 @@ export default function AIDealClosingAssistantPage() {
 
                         {/* Latest Activity Notes */}
                         <td className="px-4 py-3 border-r border-slate-100 max-w-[300px]">
-                          <p className="text-xs text-slate-600 line-clamp-3 leading-relaxed font-sans">
-                            {lead.notes || "No call notes logged."}
-                          </p>
+                          <div className="space-y-1">
+                            <p className="text-xs text-slate-600 line-clamp-2 leading-relaxed font-sans">
+                              {lead.notes || "No call notes logged."}
+                            </p>
+                            {lead.next_best_action && (
+                              <div className="inline-flex rounded-full bg-indigo-50 px-2 py-0.5 text-[10px] font-semibold text-indigo-700 border border-indigo-100">
+                                Next: {lead.next_best_action}
+                              </div>
+                            )}
+                          </div>
                         </td>
 
                         {/* Action buttons matching Hub */}
@@ -1030,9 +1262,10 @@ export default function AIDealClosingAssistantPage() {
                               size="sm"
                               variant="outline"
                               onClick={() => handleMarkFollowedUp(lead.id, "Sales representative marked as followed up via dashboard")}
+                              disabled={markingLeadId === lead.id}
                               className="border-slate-300 hover:bg-slate-100 text-slate-700 font-medium text-xs h-8"
                             >
-                              Mark Actioned
+                              {markingLeadId === lead.id ? "Saving..." : "Mark Actioned"}
                             </Button>
                           </div>
                         </td>
@@ -1164,22 +1397,53 @@ export default function AIDealClosingAssistantPage() {
       </div>
 
       {/* AI Draft Message Dialog */}
-      <Dialog open={selectedLead !== null} onOpenChange={() => setSelectedLead(null)}>
-        <DialogContent className="sm:max-w-md bg-white border border-slate-200">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-slate-900 font-bold">
-              <Sparkles className="h-5 w-5 text-indigo-600 animate-pulse" />
-              Follow-up Message Draft
-            </DialogTitle>
-            <DialogDescription className="text-xs text-slate-500">
-              Drafted specifically for {selectedLead?.name} in {selectedLead?.stage} stage.
-            </DialogDescription>
-          </DialogHeader>
+      <Dialog open={selectedLead !== null} onOpenChange={() => { setSelectedLead(null); setGeneratedMessage(""); setDraftMode("followup"); setCopied(false) }}>
+      <DialogContent className="sm:max-w-md bg-white border border-slate-200">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 text-slate-900 font-bold">
+            <Sparkles className="h-5 w-5 text-indigo-600 animate-pulse" />
+            {draftMode === "followup" ? "Follow-up Message Draft" : draftMode === "summary" ? "AI Deal Summary" : "Next Best Action"}
+          </DialogTitle>
+          <DialogDescription className="text-xs text-slate-500">
+            Drafted specifically for {selectedLead?.name} in {getStageMeta(selectedLead?.pipeline_stage || selectedLead?.stage || "new").label} stage.
+          </DialogDescription>
+        </DialogHeader>
+
+        {selectedLead && (
+          <div className="flex flex-wrap gap-2">
+            <Button
+              size="sm"
+              variant={draftMode === "followup" ? "default" : "outline"}
+              onClick={() => handleGenerateMessage(selectedLead, "followup")}
+              className="h-8 text-xs"
+            >
+              Follow-up
+            </Button>
+            <Button
+              size="sm"
+              variant={draftMode === "summary" ? "default" : "outline"}
+              onClick={() => handleGenerateMessage(selectedLead, "summary")}
+              className="h-8 text-xs"
+            >
+              AI Summary
+            </Button>
+            <Button
+              size="sm"
+              variant={draftMode === "next_action" ? "default" : "outline"}
+              onClick={() => handleGenerateMessage(selectedLead, "next_action")}
+              className="h-8 text-xs"
+            >
+              Next Best Action
+            </Button>
+          </div>
+        )}
 
           {isGenerating ? (
             <div className="py-12 text-center text-slate-500 flex flex-col items-center justify-center gap-3">
               <div className="w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin" />
-              <p className="text-xs font-semibold text-slate-400">Gemini is composing your follow-up...</p>
+              <p className="text-xs font-semibold text-slate-400">
+                Gemini is composing your {draftMode === "followup" ? "follow-up" : draftMode === "summary" ? "summary" : "next action"}...
+              </p>
             </div>
           ) : (
             <div className="space-y-4 max-w-full overflow-hidden">
@@ -1187,10 +1451,58 @@ export default function AIDealClosingAssistantPage() {
                 {generatedMessage}
               </div>
 
-              {selectedLead && selectedLead.notes && (
+              {selectedLead && selectedLead.notes && draftMode === "followup" && (
                 <div className="bg-amber-50/50 border border-amber-200/50 rounded-lg p-2.5 break-words">
                   <p className="text-[10px] uppercase font-bold text-amber-800 tracking-wide">Objection Context Included:</p>
                   <p className="text-xs text-amber-900 mt-1 italic line-clamp-2 break-words">"{selectedLead.notes}"</p>
+                </div>
+              )}
+
+              {generatedMessage && !generatedMessage.startsWith("Error:") && (
+                <div className="grid grid-cols-2 gap-2 rounded-lg border border-slate-200 bg-slate-50 p-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleEmailDraft}
+                    className="h-9 justify-start gap-2 border-slate-300 bg-white text-slate-700 text-xs"
+                    aria-label="Send via Email"
+                    title="Send via Email"
+                  >
+                    <Mail className="h-4 w-4" />
+                    Send via Email
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleWhatsAppDraft}
+                    className="h-9 justify-start gap-2 border-slate-300 bg-white text-slate-700 text-xs"
+                    aria-label="Send via WhatsApp"
+                    title="Send via WhatsApp"
+                  >
+                    <MessageCircleMore className="h-4 w-4" />
+                    Send via WhatsApp
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleCopyMessage}
+                    className="h-9 justify-start gap-2 border-slate-300 bg-white text-slate-700 text-xs"
+                    aria-label="Copy Draft"
+                    title="Copy Draft"
+                  >
+                    Copy Draft
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleRegenerateDraft}
+                    className="h-9 justify-start gap-2 border-slate-300 bg-white text-slate-700 text-xs"
+                    aria-label="Regenerate Draft"
+                    title="Regenerate Draft"
+                  >
+                    <RefreshCw className="h-4 w-4" />
+                    Regenerate Draft
+                  </Button>
                 </div>
               )}
 
