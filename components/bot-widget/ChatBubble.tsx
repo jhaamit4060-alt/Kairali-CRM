@@ -10,7 +10,7 @@ export default function ChatBubble({ open, onClick }: ChatBubbleProps) {
         <button
             onClick={onClick}
             aria-label={open ? 'Close assistant' : 'Open assistant'}
-            className="fixed bottom-7 right-7 z-[1000] flex h-[60px] w-[60px] items-center justify-center rounded-full bg-gradient-to-br from-[#8EA12E] to-[#6F8C24] shadow-lg hover:scale-105 transition-all duration-200"
+            className="fixed bottom-3.5 sm:bottom-6 right-3.5 sm:right-7 z-[1000] flex h-[52px] w-[52px] sm:h-[60px] sm:w-[60px] items-center justify-center rounded-full bg-gradient-to-br from-[#8EA12E] to-[#6F8C24] shadow-lg hover:scale-105 transition-all duration-200"
         >
             {open ? (
                 <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round">

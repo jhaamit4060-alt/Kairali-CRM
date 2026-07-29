@@ -244,9 +244,9 @@ export default function ChatWidget() {
             <ChatBubble open={open} onClick={() => setOpen((v) => !v)} />
 
             {open && (
-                <div className="fixed bottom-[104px] right-7 z-[1000] flex h-[560px] w-[380px] flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-2xl">
+                <div className="fixed bottom-[76px] sm:bottom-[88px] right-3 sm:right-7 z-[1000] flex h-[calc(100vh-96px)] max-h-[560px] w-[calc(100vw-24px)] sm:w-[380px] flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-2xl transition-all duration-200">
                     <div
-                        className="flex items-center gap-[12px] border-b-2 border-[#C58B2B] px-[18px] py-4 text-white shadow-md transition-all duration-300"
+                        className="flex flex-shrink-0 items-center gap-[12px] border-b-2 border-[#C58B2B] px-[18px] py-3.5 text-white shadow-md transition-all duration-300"
                         style={{ background: 'linear-gradient(135deg, #152238 0%, #1B2E4A 100%)' }}
                     >
                         <div className="flex h-[42px] w-[42px] flex-shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#8EA12E] to-[#6F8C24] text-[15px] font-bold text-white border border-white/50 shadow-md hover:scale-105 transition-transform duration-200">
@@ -292,7 +292,7 @@ export default function ChatWidget() {
                     </div>
 
                     {user && (
-                        <div className="flex gap-2 px-3.5 py-1.5 border-t border-gray-100 bg-slate-50 overflow-x-auto text-[11px] select-none">
+                        <div className="flex flex-shrink-0 gap-2 px-3.5 py-1.5 border-t border-gray-100 bg-slate-50 overflow-x-auto text-[11px] select-none">
                             <button
                                 onClick={fetchMyTickets}
                                 className="flex-shrink-0 px-2.5 py-1 rounded-full border border-[#8EA12E] bg-white text-[#8EA12E] hover:bg-[#8EA12E] hover:text-white font-medium transition duration-200"
@@ -302,7 +302,7 @@ export default function ChatWidget() {
                         </div>
                     )}
 
-                    <div className="flex items-center gap-2 border-t border-gray-200 bg-white px-3.5 py-3">
+                    <div className="flex flex-shrink-0 items-center gap-2 border-t border-gray-200 bg-white px-3.5 py-3">
                         <input
                             type="text"
                             value={input}
