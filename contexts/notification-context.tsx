@@ -160,7 +160,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
 
     const [newLeads, teamFMS, villaFMS, voiceReceived, voiceSent, sysNotifs] = await Promise.all([
       fetchLeads(),
-      fetchFMS("https://script.google.com/macros/s/AKfycbwpbLZ2qiWthyEBKoTovx40lgclcqe8FdwoaurGdWJJ3MJ0F7KjnrJdO0wGJVkw_tOm/exec", "team", "KTAHV"),
+      fetchFMS("/api/ktahv-bookings", "team", "KTAHV"),
       fetchFMS("https://script.google.com/macros/s/AKfycbzzu8kft6pqinOA3QOku8A56Vb-0pTGkkP2V6PRiTV3EBD05oJ185bwtbsAC9WgynJH7Q/exec", "villa", "VILLARAAG"),
       fetchVoiceLeads("received"),
       fetchVoiceLeads("sent"),

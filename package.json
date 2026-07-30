@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "audit:fms-team": "node scripts/verify-fms-team.mjs && node --test tests/ktahv-permissions.test.mjs",
     "build": "next build",
     "dev": "next dev",
     "lint": "next lint",

@@ -1,11 +1,11 @@
 const mysql = require('mysql2/promise');
 
 const DB_CONFIG = {
-  host: '165.22.220.165',
-  port: 3306,
-  database: 'spalabsdomain_Kairali_CRM_Db',
-  user: 'spalabsdomain_kairalicrm_users',
-  password: 'SoPNxU*[zF~6W{=f',
+  host: process.env.DB_HOST,
+  port: Number(process.env.DB_PORT || 3306),
+  database: process.env.DB_NAME,
+  user: process.env.DB_USER,
+  password: process.env.DB_PASSWORD,
 };
 
 function parseToDate(val) {
@@ -64,6 +64,9 @@ function calculateTAT_new(candidates, dateTime) {
 }
 
 async function main() {
+  if (!DB_CONFIG.host || !DB_CONFIG.database || !DB_CONFIG.user || !DB_CONFIG.password) {
+    throw new Error('DB_HOST, DB_NAME, DB_USER, and DB_PASSWORD are required');
+  }
   const pool = mysql.createPool(DB_CONFIG);
   const connection = await pool.getConnection();
   try {

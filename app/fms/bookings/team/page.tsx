@@ -1,6 +1,15 @@
 "use client"
 
-import { useState, useEffect, useRef, Suspense, use, useMemo, useCallback } from "react"
+import {
+  useState,
+  useEffect,
+  useRef,
+  Suspense,
+  use,
+  useMemo,
+  useCallback,
+  type ComponentProps,
+} from "react"
 import { createPortal } from "react-dom"
 import { useRouter } from "next/navigation"
 import { useBookings, Booking } from "@/hooks/use-fms-bookings"
@@ -17,7 +26,14 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead as BaseTableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { toast } from "sonner"
 import { showFormSubmitSuccess } from "@/utils/toast-utils"
@@ -84,6 +100,34 @@ import {
   User,
   Tangent
 } from "lucide-react"
+
+function TableHead({
+  onClick,
+  onKeyDown,
+  ...props
+}: ComponentProps<typeof BaseTableHead>) {
+  const isInteractive = Boolean(onClick)
+
+  return (
+    <BaseTableHead
+      {...props}
+      onClick={onClick}
+      onKeyDown={(event) => {
+        onKeyDown?.(event)
+        if (
+          isInteractive &&
+          !event.defaultPrevented &&
+          (event.key === "Enter" || event.key === " ")
+        ) {
+          event.preventDefault()
+          event.currentTarget.click()
+        }
+      }}
+      role={isInteractive ? "button" : props.role}
+      tabIndex={isInteractive ? 0 : props.tabIndex}
+    />
+  )
+}
 import { Bar, BarChart, Line, LineChart, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, LabelList, PieChart, Pie, Legend } from "recharts"
 import { set } from "date-fns"
 import { el, fi, se } from "date-fns/locale"
@@ -350,7 +394,28 @@ export default function SalesAccountsTeamPage() {
     return data;
   };
 
-  let { bookings: fetchedBookings, setBookings: setFetchedBookings, pendingCount, nameAliases, loading, error, refetch: refetchBookings } = useBookings();
+  const submitBookingAction = async (
+    action: string,
+    payload: Record<string, unknown>,
+  ) => {
+    const response = await fetch("/api/ktahv-bookings/actions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action, payload }),
+    })
+    return validateResponse(response)
+  }
+
+  let {
+    bookings: fetchedBookings,
+    setBookings: setFetchedBookings,
+    pendingCount,
+    nameAliases,
+    loading,
+    error,
+    isTruncated,
+    refetch: refetchBookings,
+  } = useBookings();
 
   const setBookings = useCallback((update: Booking[] | ((prev: Booking[]) => Booking[])) => {
     _setBookings(update);
@@ -536,7 +601,7 @@ export default function SalesAccountsTeamPage() {
   // When hook returns data, replace the local sample data while preserving local updates thereafter.
   useEffect(() => {
     try {
-      if (Array.isArray(fetchedBookings) && fetchedBookings.length > 0) {
+      if (Array.isArray(fetchedBookings)) {
         // Filter bookings based on user permissions
         const permissionFilteredBookings = fetchedBookings.filter(booking => canUserViewBooking(booking))
         // Replace sample data with API data unconditionally (we want API to show up)
@@ -650,7 +715,7 @@ export default function SalesAccountsTeamPage() {
   })
 
   const [showViewModal, setShowViewModal] = useState(false)
-  const [viewBookingData, setViewBookingData] = useState<any>(null)
+  const [viewBookingData, setViewBookingData] = useState<Booking | null>(null)
 
   const [paymentHistoryModal, setPaymentHistoryModal] = useState<{
     bookingId: string;
@@ -1285,7 +1350,7 @@ export default function SalesAccountsTeamPage() {
     // Check if stage is completed (has actual completion date)
     const isStageCompleted = (stageNum: number) => {
       const stageData = accountsStages[stageNum.toString()];
-      return stageData?.actual && stageData.actual.trim() !== "";
+      return Boolean(stageData?.actual && stageData.actual.trim() !== "");
     };
 
     // Parse collections from booking history
@@ -1319,7 +1384,7 @@ export default function SalesAccountsTeamPage() {
     // Check if stage is activated (has planned date)
     const isStageActivated = (stageNum: number) => {
       const stageData = accountsStages[stageNum.toString()];
-      return stageData?.planned && stageData.planned.trim() !== "";
+      return Boolean(stageData?.planned && stageData.planned.trim() !== "");
     };
 
     let currentStage = 1;
@@ -1368,10 +1433,10 @@ export default function SalesAccountsTeamPage() {
       stage1: initStage(1),
       stage2: initStage(2),
       stage3: initStage(3),
-      salesAgentName: booking.bookingDetails?.bookingTakenBy || "",
+      salesAgentName: booking.bookingTakenBy || booking.assignedTo || "",
       salesAgentVerified: false,
       salesAgentRemarks: "",
-      uploadedScreenshot: booking.paymentDetails?.uploadedScreenshot || "",
+      uploadedScreenshot: booking.uploadScreenShot || "",
       paymentCollectionHistory: booking?.paymentCollectionHistory || [],
     };
   };
@@ -1530,6 +1595,7 @@ export default function SalesAccountsTeamPage() {
     // ---------------------------
     if (checkInFilter && checkInFilter !== "all") {
       const bookingIn = booking.checkIn ? new Date(booking.checkIn) : new Date(booking.createdDate);
+      if (Number.isNaN(bookingIn.getTime())) return false;
       switch (checkInFilter) {
         case "today": {
           if (bookingIn.toDateString() !== today.toDateString()) return false;
@@ -1585,6 +1651,16 @@ export default function SalesAccountsTeamPage() {
           break;
         }
 
+        case "this_year": {
+          if (bookingIn.getFullYear() !== today.getFullYear()) return false;
+          break;
+        }
+
+        case "last_year": {
+          if (bookingIn.getFullYear() !== today.getFullYear() - 1) return false;
+          break;
+        }
+
         case "custom": {
           // ❌ Custom selected but date range not chosen
           if (!customDateRange.start || !customDateRange.end) {
@@ -1613,7 +1689,7 @@ export default function SalesAccountsTeamPage() {
     // ---------------------------
     if (checkOutFilter && checkOutFilter !== "all") {
       const bookingOut = booking.checkOut ? new Date(booking.checkOut) : null;
-      if (!bookingOut) return false;
+      if (!bookingOut || Number.isNaN(bookingOut.getTime())) return false;
 
       switch (checkOutFilter) {
         case "today": {
@@ -1667,6 +1743,16 @@ export default function SalesAccountsTeamPage() {
             bookingOut.getFullYear() !== last.getFullYear()
           )
             return false;
+          break;
+        }
+
+        case "this_year": {
+          if (bookingOut.getFullYear() !== today.getFullYear()) return false;
+          break;
+        }
+
+        case "last_year": {
+          if (bookingOut.getFullYear() !== today.getFullYear() - 1) return false;
           break;
         }
 
@@ -1743,8 +1829,7 @@ export default function SalesAccountsTeamPage() {
         bookings
           .map(b =>
             b.assignedTo?.trim() ||
-            b.bookingTakenBy?.trim() ||
-            b.salesperson?.trim()
+            b.bookingTakenBy?.trim()
           )
           .filter(Boolean)
       )
@@ -1756,8 +1841,7 @@ export default function SalesAccountsTeamPage() {
     bookings.reduce<Record<string, number>>((acc, b) => {
       const name =
         b.bookingTakenBy?.trim() ||
-        b.assignedTo?.trim() ||
-        b.salesperson?.trim();
+        b.assignedTo?.trim();
 
       if (!name) return acc;
 
@@ -1846,7 +1930,6 @@ export default function SalesAccountsTeamPage() {
         const bookingPerson =
           booking.bookingTakenBy?.trim() ||
           booking.assignedTo?.trim() ||
-          booking.salesperson?.trim() ||
           "";
 
         const matchesAssigned =
@@ -3746,7 +3829,7 @@ export default function SalesAccountsTeamPage() {
     return () => clearTimeout(t)
   }, [debouncedSearchTerm, statusFilter, teamFilter, checkInFilter, checkOutFilter, assignedFilter, sourceFilter, filteredBookings.length])
 
-  const handleAction = (action: string, bookingId: string, booking) => {
+  const handleAction = (action: string, bookingId: string, actionBooking?: Booking) => {
     // console.log("[v0] Action clicked:", action, "for booking:", bookingId)
 
     // Close all modals first to prevent conflicts
@@ -3764,8 +3847,8 @@ export default function SalesAccountsTeamPage() {
     setTimeout(() => {
       switch (action) {
         case "edit": {
-          const id = booking?.bookingType === "Individual" ? booking.editID : booking?.guestId
-          const formType = booking?.bookingType === "Individual" ? "individual" : "group"
+          const id = actionBooking?.bookingType === "Individual" ? actionBooking.editID : actionBooking?.guestId
+          const formType = actionBooking?.bookingType === "Individual" ? "individual" : "group"
           if (id) {
             router.push(`/fms/bookings/ktahv?id=${encodeURIComponent(id)}&formType=${encodeURIComponent(formType)}`)
           } else {
@@ -3773,19 +3856,20 @@ export default function SalesAccountsTeamPage() {
           }
           break
         }
-        case "view":
-          const booking = bookings.find((b) => b.id === bookingId)
-          if (booking) {
-            setViewBookingData(booking)
+        case "view": {
+          const foundBooking = bookings.find((b) => b.id === bookingId)
+          if (foundBooking) {
+            setViewBookingData(foundBooking)
             setShowViewModal(true)
           }
           break
+        }
         case "cancel":
           // console.log("[v0] Opening cancel modal for:", bookingId)
           const currentBooking = bookings.find((b) => b.id === bookingId)
 
           // setSelectedBookingId(bookingId)
-          setSelectedBookingForCancelledBookings(currentBooking)
+          setSelectedBookingForCancelledBookings(currentBooking ?? null)
           setSelectedBookingId(bookingId)
           setIsCancelled(false)
           setShowCancelModal(true)
@@ -3893,13 +3977,13 @@ export default function SalesAccountsTeamPage() {
             const foStages = foPMSBooking.foPersonStage || {};
             const isFOStageCompleted = (stageNum: number) => {
               const stageData = foStages[stageNum.toString()];
-              return stageData?.actual && stageData.actual.trim() !== "";
+              return Boolean(stageData?.actual && stageData.actual.trim() !== "");
             };
 
             // ✅ FIXED: Check if FO stage is activated
             const isFOStageActivated = (stageNum: number) => {
               const stageData = foStages[stageNum.toString()];
-              return stageData?.planned && stageData.planned.trim() !== "";
+              return Boolean(stageData?.planned && stageData.planned.trim() !== "");
             };
 
             // ✅ SKIP LOGIC: Determine initial FO stage based on activated stages only
@@ -3980,17 +4064,11 @@ export default function SalesAccountsTeamPage() {
 
     setIsSubmitting(true);
     try {
-      const submitUrl = "https://script.google.com/macros/s/AKfycbwpbLZ2qiWthyEBKoTovx40lgclcqe8FdwoaurGdWJJ3MJ0F7KjnrJdO0wGJVkw_tOm/exec";
-
-      const response = await fetch(submitUrl + "?action=cancelBooking", {
-        method: "POST",
-        body: JSON.stringify({
-          bookingId: selectedBookingForCancelledBookings?.bookingId,
-          reason: cancelReason,
-          remarks: cancelRemarks,
-        }),
+      const data = await submitBookingAction("cancelBooking", {
+        bookingId: selectedBookingForCancelledBookings?.bookingId,
+        reason: cancelReason,
+        remarks: cancelRemarks,
       });
-      const data = await validateResponse(response);
 
       toast.success("Booking cancelled successfully");
       setIsCancelled(true);
@@ -4174,10 +4252,7 @@ export default function SalesAccountsTeamPage() {
           }
         }
 
-        const submitUrl =
-          "https://script.google.com/macros/s/AKfycbwpbLZ2qiWthyEBKoTovx40lgclcqe8FdwoaurGdWJJ3MJ0F7KjnrJdO0wGJVkw_tOm/exec?action=paymentCollection"
-
-        console.log("Submitting payment for booking ID:", JSON.stringify({
+        const data = await submitBookingAction("paymentCollection", {
           paymentData: {
             bookingId: selectedBookingForPayment?.bookingId,
             amount: paymentData.amount,
@@ -4190,29 +4265,7 @@ export default function SalesAccountsTeamPage() {
             paymentLocation: paymentData.paymentLocation,
             paymentCollectedBy: paymentData.paymentCollectedBy,
           },
-        }));
-
-        // 🔴 API CALL (PAYLOAD UNCHANGED)
-        const response = await fetch(submitUrl, {
-          method: "POST",
-          headers: { "Content-Type": "text/plain;charset=utf-8" },
-          body: JSON.stringify({
-            paymentData: {
-              bookingId: selectedBookingForPayment?.bookingId,
-              amount: paymentData.amount,
-              receivedAmount: paymentData.receivedAmount,
-              currency: paymentData.currency,
-              paymentMode: paymentData.paymentMode,
-              receivedDate: paymentData.receivedDate,
-              receiptNumber: paymentData.receiptNumber,
-              screenshot: screenshotData,
-              paymentLocation: paymentData.paymentLocation,
-              paymentCollectedBy: paymentData.paymentCollectedBy,
-            },
-          }),
         })
-
-        const data = await validateResponse(response)
         await refetchBookings()
         // console.log("Success:", data)
       },
@@ -4287,26 +4340,14 @@ export default function SalesAccountsTeamPage() {
           }
         }
 
-        const submitUrl =
-          "https://script.google.com/macros/s/AKfycbwpbLZ2qiWthyEBKoTovx40lgclcqe8FdwoaurGdWJJ3MJ0F7KjnrJdO0wGJVkw_tOm/exec?action=approval"
-
-        // 🔴 API CALL (PAYLOAD SAME)
-        const response = await fetch(submitUrl, {
-          method: "POST",
-          body: JSON.stringify({
-            bookingId: selectedBookingForApproval?.bookingId,
-            clientName: selectedBookingForApproval?.guestName,
-            approvedBy: approvalData.approvedBy,
-            approveTillDate: approvalData.approveTillDate,
-            screenshot: screenshotData,
-            remarks: approvalData.remarks,
-            uploadedBy: user?.name,
-            uploadedByEmail: user?.email,
-
-          }),
+        const data = await submitBookingAction("approval", {
+          bookingId: selectedBookingForApproval?.bookingId,
+          clientName: selectedBookingForApproval?.guestName,
+          approvedBy: approvalData.approvedBy,
+          approveTillDate: approvalData.approveTillDate,
+          screenshot: screenshotData,
+          remarks: approvalData.remarks,
         })
-
-        const data = await validateResponse(response)
         await refetchBookings()
         // console.log("Approval upload success:", data)
       },
@@ -4342,11 +4383,8 @@ export default function SalesAccountsTeamPage() {
   //     return
   //   }
 
-  //   var submitUrl = "https://script.google.com/macros/s/AKfycbwpbLZ2qiWthyEBKoTovx40lgclcqe8FdwoaurGdWJJ3MJ0F7KjnrJdO0wGJVkw_tOm/exec";
-  //   // You can use fetch or axios to send a POST request to the server
-  //   // Example using fetch:
-  //   submitUrl = submitUrl + "?action=accountStatusUpdate1";
-  //   fetch(submitUrl, {
+  //   // Submit through the authenticated local booking action route.
+  //   fetch("/api/ktahv-bookings/actions", {
   //     method: "POST",
   //     headers: {
   //       "Content-Type": "application/json",
@@ -4400,12 +4438,9 @@ export default function SalesAccountsTeamPage() {
     try {
       setIsSubmitting(true)
 
-      const submitUrl =
-        "https://script.google.com/macros/s/AKfycbwpbLZ2qiWthyEBKoTovx40lgclcqe8FdwoaurGdWJJ3MJ0F7KjnrJdO0wGJVkw_tOm/exec?action=accountStatusUpdate" + accountsVerifyData.currentStage
-
-      const response = await fetch(submitUrl, {
-        method: "POST",
-        body: JSON.stringify({
+      const data = await submitBookingAction(
+        `accountStatusUpdate${accountsVerifyData.currentStage}`,
+        {
           id: selectedBookingForAccounts?.bookingId,
           currentStage: accountsVerifyData.currentStage,
           stageVerification: {
@@ -4438,10 +4473,8 @@ export default function SalesAccountsTeamPage() {
               }
             } : {};
           })()
-        }),
-      })
-
-      const data = await validateResponse(response)
+        },
+      )
       // console.log(`Stage ${accountsVerifyData.currentStage} Success:`, data)
 
       // Mark current stage as completed
@@ -4576,12 +4609,9 @@ export default function SalesAccountsTeamPage() {
     try {
       setIsSubmitting(true)
 
-      const submitUrl =
-        `https://script.google.com/macros/s/AKfycbwpbLZ2qiWthyEBKoTovx40lgclcqe8FdwoaurGdWJJ3MJ0F7KjnrJdO0wGJVkw_tOm/exec?action=foStatusUpdate${foPMSVerifyData.currentStage}`
-
-      const response = await fetch(submitUrl, {
-        method: "POST",
-        body: JSON.stringify({
+      const data = await submitBookingAction(
+        `foStatusUpdate${foPMSVerifyData.currentStage}`,
+        {
           id: selectedBookingForFOPMS?.bookingId,
           currentStage: foPMSVerifyData.currentStage,
           stageVerification: {
@@ -4606,10 +4636,8 @@ export default function SalesAccountsTeamPage() {
               }
             } : {};
           })()
-        }),
-      })
-
-      const data = await validateResponse(response)
+        },
+      )
       // console.log(`Stage ${foPMSVerifyData.currentStage} Success:`, data)
       const canonicalFoStatus = String(
         data?.frontOfficeStatus ??
@@ -4740,20 +4768,12 @@ export default function SalesAccountsTeamPage() {
     try {
       setIsSubmitting(true)
 
-      const submitUrl =
-        "https://script.google.com/macros/s/AKfycbwpbLZ2qiWthyEBKoTovx40lgclcqe8FdwoaurGdWJJ3MJ0F7KjnrJdO0wGJVkw_tOm/exec?action=checkoutStatusUpdate1"
-
-      const response = await fetch(submitUrl, {
-        method: "POST",
-        body: JSON.stringify({
+      const data = await submitBookingAction("checkoutStatusUpdate1", {
           id: selectedBookingForCheckout?.bookingId,
           paymentReceivedStatus: checkoutVerifyData.paymentReceivedStatus,
           remarks: checkoutVerifyData.remarks,
           paymentData: paymentData,
-        }),
       })
-
-      const data = await validateResponse(response)
       // console.log("Success:", data)
       const canonicalCheckoutStatus = String(
         data?.checkoutVerificationStatus ??
@@ -4771,7 +4791,9 @@ export default function SalesAccountsTeamPage() {
               checkoutVerificationStatus:
                 canonicalCheckoutStatus,
               checkoutVerificationRemarks: checkoutVerifyData.remarks,
-              paymentReceivedDate: new Date(paymentData.receivedDate),
+              paymentReceivedDate: paymentData.receivedDate
+                ? new Date(paymentData.receivedDate).toISOString()
+                : "",
               paymentMode: paymentData.paymentMode,
               paymentReceiptNumber: paymentData.receiptNumber,
               receivedAmount: Number(paymentData.receivedAmount),
@@ -5264,7 +5286,7 @@ export default function SalesAccountsTeamPage() {
       <span
         className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${getStatusColor(status, type)}`}
       >
-        {formatStatus(status, type)}
+        {formatStatus(status)}
       </span>
     )
   }
@@ -5347,6 +5369,25 @@ export default function SalesAccountsTeamPage() {
     );
   }
 
+  if (error) {
+    return (
+      <main className="min-h-screen bg-slate-50 px-4 py-16">
+        <div
+          role="alert"
+          className="mx-auto max-w-lg rounded-xl border border-red-200 bg-white p-6 text-center shadow-sm"
+        >
+          <AlertTriangle className="mx-auto mb-3 h-10 w-10 text-red-500" aria-hidden="true" />
+          <h1 className="text-lg font-semibold text-slate-900">Bookings could not be loaded</h1>
+          <p className="mt-2 text-sm text-slate-600">{error.message}</p>
+          <Button className="mt-5" onClick={() => void refetchBookings()}>
+            <RefreshCw className="mr-2 h-4 w-4" aria-hidden="true" />
+            Try again
+          </Button>
+        </div>
+      </main>
+    );
+  }
+
   // if (loading) {
   //   return (
   //     <div className="fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-white/90 backdrop-blur-xl">
@@ -5372,6 +5413,11 @@ export default function SalesAccountsTeamPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-teal-50 overflow-x-hidden">
+      {isTruncated && (
+        <div role="status" className="border-b border-amber-300 bg-amber-50 px-4 py-2 text-center text-sm text-amber-900">
+          Showing the newest 1,000 bookings. Refine the date filters for older records.
+        </div>
+      )}
       <div className="bg-gradient-to-r from-teal-700 via-teal-600 to-violet-600 border-b border-teal-400 shadow-2xl">
         <div className="w-full px-2 sm:px-4 lg:px-8 py-4 sm:py-6 lg:py-8">
           <BackButton className="mb-4" />
@@ -6470,7 +6516,7 @@ export default function SalesAccountsTeamPage() {
                             <LabelList
                               dataKey="amount"
                               position="top"
-                              formatter={(v) => `₹${((v || 0) / 1000).toFixed(0)}k`}
+                              formatter={(v) => `₹${(Number(v || 0) / 1000).toFixed(0)}k`}
                               style={{ fontSize: 10, fill: '#0f172a', fontWeight: 600 }}
                             />
                           </Bar>
@@ -7013,7 +7059,7 @@ export default function SalesAccountsTeamPage() {
                                   <MoreHorizontal className="h-4 w-4" />
                                 </Button>
                               </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end" portal={false}>
+                              <DropdownMenuContent align="end">
                                 {/* <DropdownMenuItem
                                   onClick={(e) => {
                                     e.stopPropagation();
@@ -7531,13 +7577,7 @@ export default function SalesAccountsTeamPage() {
                         <TableCell className="text-slate-700 space-y-1">
                           {/* MOBILE */}
                           <div className="font-medium">
-                            {booking.mobile ||
-                              booking.mobile ||
-                              booking.phone ||
-                              booking.phoneNumber ||
-                              booking.mobileNo ||
-                              booking.guestMobile ||
-                              "-"}
+                            {booking.mobile || "-"}
                           </div>
 
                           {/* EMAIL */}
@@ -7799,7 +7839,7 @@ export default function SalesAccountsTeamPage() {
                         </TableCell>
                         {/* Booking Type */}
                         <TableCell className="text-slate-700 font-medium">
-                          {booking.bookingType || booking.type || "Individual"}
+                          {booking.bookingType || "Individual"}
                         </TableCell>
                         <TableCell className="font-medium text-slate-700">
                           {booking.bSource || "-"}
@@ -8425,13 +8465,7 @@ export default function SalesAccountsTeamPage() {
                         <TableCell className="text-slate-700 space-y-1">
                           {/* MOBILE */}
                           <div className="font-medium">
-                            {booking.mobile ||
-                              booking.mobile ||
-                              booking.phone ||
-                              booking.phoneNumber ||
-                              booking.mobileNo ||
-                              booking.guestMobile ||
-                              "-"}
+                            {booking.mobile || "-"}
                           </div>
 
                           {/* EMAIL */}
@@ -8690,7 +8724,7 @@ export default function SalesAccountsTeamPage() {
                         </TableCell>
                         {/* Booking Type */}
                         <TableCell className="text-slate-700 font-medium">
-                          {booking.bookingType || booking.type || "Individual"}
+                          {booking.bookingType || "Individual"}
                         </TableCell>
                         <TableCell className="font-medium text-slate-700">
                           {booking.bSource || "-"}
@@ -9426,7 +9460,7 @@ export default function SalesAccountsTeamPage() {
                                 </Button>
                               </DropdownMenuTrigger>
 
-                              <DropdownMenuContent align="end" portal={false}>
+                              <DropdownMenuContent align="end">
 
                                 {/* View Details */}
                                 <DropdownMenuItem
@@ -9903,7 +9937,7 @@ export default function SalesAccountsTeamPage() {
                             </Button>
                           </DropdownMenuTrigger>
 
-                          <DropdownMenuContent align="end" portal={false}>
+                          <DropdownMenuContent align="end">
 
                             {/* View */}
                             <DropdownMenuItem
@@ -10356,7 +10390,6 @@ export default function SalesAccountsTeamPage() {
             }}
           >
             <DialogContent
-              modal={false}
               className="
             sm:max-w-md
             md:max-w-2xl
@@ -10708,7 +10741,7 @@ export default function SalesAccountsTeamPage() {
 
                               setPaymentData({
                                 ...paymentData,
-                                receivedAmount: value,
+                                receivedAmount: String(value),
                               })
                             }}
                             onWheel={(e) => e.currentTarget.blur()}
@@ -10949,7 +10982,7 @@ export default function SalesAccountsTeamPage() {
                         {getCurrencySymbol(String(selectedBookingForPayment.currency).slice(0, 3))}{" "}
                         {selectedBookingForPayment
                           ? (
-                            selectedBookingForPayment.originalAmount -
+                            Number(selectedBookingForPayment.originalAmount || 0) -
                             getTotalReceivedRaw(selectedBookingForPayment) -
                             (Number.parseFloat(paymentData.receivedAmount) || 0)
                           ).toLocaleString()
@@ -11074,7 +11107,14 @@ export default function SalesAccountsTeamPage() {
                   <div className="bg-gradient-to-br from-purple-500 to-purple-600 p-4 rounded-lg text-white shadow-lg">
                     <p className="text-xs opacity-90 mb-1">Final Status</p>
                     <p className="text-lg font-bold capitalize mt-2">
-                      {accountsVerifyData?.paymentStatus || "Pending"}
+                      {(accountsVerifyData.currentStage === 1
+                        ? accountsVerifyData.stage1
+                        : accountsVerifyData.currentStage === 2
+                          ? accountsVerifyData.stage2
+                          : accountsVerifyData.stage3
+                      ).paymentReceivedStatus ||
+                        selectedBookingForAccounts.accountsVerifyStatus ||
+                        "Pending"}
                     </p>
                   </div>
 
@@ -13247,7 +13287,10 @@ export default function SalesAccountsTeamPage() {
                       <div className="grid grid-cols-2">
                         <span className="text-gray-600">Group Booking:</span>
                         <span className="font-medium">
-                          {(viewBookingData?.groupBooking === "Yes" || String(viewBookingData?.bookingType || viewBookingData?.bookingDetails?.bookingType).toLowerCase() === "group") ? "Yes" : "No"}
+                          {(viewBookingData?.groupBooking === "Yes" ||
+                            String(viewBookingData?.bookingType).toLowerCase() === "group")
+                            ? "Yes"
+                            : "No"}
                         </span>
                       </div>
                     </div>
@@ -13268,7 +13311,13 @@ export default function SalesAccountsTeamPage() {
 
                       <div className="grid grid-cols-2">
                         <span className="text-gray-600">Discount Amount:</span>
-                        <span className="font-medium">{getCurrencySymbol(String(viewBookingData?.currency).slice(0, 3))}{viewBookingData?.totalAmountBeforeDiscount > 0 ? viewBookingData?.totalAmountBeforeDiscount - viewBookingData?.originalAmount : 0}</span>
+                        <span className="font-medium">
+                          {getCurrencySymbol(String(viewBookingData?.currency).slice(0, 3))}
+                          {Number(viewBookingData?.totalAmountBeforeDiscount || 0) > 0
+                            ? Number(viewBookingData?.totalAmountBeforeDiscount || 0) -
+                              Number(viewBookingData?.originalAmount || 0)
+                            : 0}
+                        </span>
                       </div>
                       <div className="grid grid-cols-2">
                         <span className="text-gray-600">Discount %:</span>
@@ -13302,7 +13351,11 @@ export default function SalesAccountsTeamPage() {
                       <div className="grid grid-cols-2">
                         <span className="text-gray-600">Balance:</span>
                         <span className="font-medium">
-                          {getCurrencySymbol(String(viewBookingData?.currency).slice(0, 3))}{Number(viewBookingData?.originalAmount - (viewBookingData?.totalAmountReceived || viewBookingData?.receivedAmount || 0) || 0).toLocaleString()}
+                          {getCurrencySymbol(String(viewBookingData?.currency).slice(0, 3))}
+                          {(
+                            Number(viewBookingData?.originalAmount || 0) -
+                            Number(viewBookingData?.totalAmountReceived || viewBookingData?.receivedAmount || 0)
+                          ).toLocaleString()}
                         </span>
                       </div>
 

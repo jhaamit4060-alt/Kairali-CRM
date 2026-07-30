@@ -1,7 +1,16 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { getPool } from "@/lib/db";
-import { parseEnv } from "util";
-import AccountsTrackerPage from "@/app/accounts-tracker/page";
+import {
+    canAccessKtahvTeamPage,
+    canViewKtahvBooking,
+    hasKtahvAction,
+    isOwnKtahvBooking,
+} from "@/lib/ktahv-permissions";
+import {
+    forbiddenResponse,
+    getSessionUser,
+    unauthenticatedResponse,
+} from "@/lib/server-session";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -23,6 +32,9 @@ const AGENTS = new Set([
 const CONVERSION_RATES: Record<string, number> = { INR: 1, USD: 85.74, EURO: 89.26 };
 
 const NAME_ALIASES: Record<string, string> = { Shoukath: "Shoukath Ali Moosa" };
+const DEFAULT_BOOKING_LIMIT = 1000;
+const MAX_BOOKING_LIMIT = 2000;
+const DB_QUERY_CONCURRENCY = 3;
 
 // Default objects to avoid repeated inline construction
 const EMPTY_ACCOUNTS = {
@@ -49,22 +61,41 @@ type EmpCounts = [number, number, number, number];
 
 // ─── Route Handler ────────────────────────────────────────────────────────────
 
-export async function GET() {
-    const pool = await getPool();
+export async function GET(req: NextRequest) {
+    const sessionUser = getSessionUser(req);
+    if (!sessionUser) return unauthenticatedResponse();
+    if (!canAccessKtahvTeamPage(sessionUser)) return forbiddenResponse();
 
-    // Acquire all connections up-front; released inside each helper's finally block
-    const [
-        conn1, conn2, paymentConn, accountsConn,
-        finaltrtfConn, deleteConn, credConn, pendConn, mainConn, guestconn
-    ] = await Promise.all([
-        pool.getConnection(), pool.getConnection(), pool.getConnection(),
-        pool.getConnection(), pool.getConnection(), pool.getConnection(),
-        pool.getConnection(), pool.getConnection(), pool.getConnection(),
-        pool.getConnection()
-    ]);
+    const pool = await getPool();
+    const requestedLimit = Number(req.nextUrl.searchParams.get("limit"));
+    const bookingLimit = Number.isInteger(requestedLimit) && requestedLimit > 0
+        ? Math.min(requestedLimit, MAX_BOOKING_LIMIT)
+        : DEFAULT_BOOKING_LIMIT;
 
     try {
-        // Run all independent DB fetches in parallel
+        // Run independent reads in small batches. The old implementation checked
+        // out the entire pool before doing any work, starving concurrent requests.
+        const results: any[] = await runInBatches([
+            async () => {
+                const conn1 = await pool.getConnection();
+                try {
+                    const conn2 = await pool.getConnection();
+                    return getBookingMapsOptimized(conn1, conn2);
+                } catch (error) {
+                    conn1.release();
+                    throw error;
+                }
+            },
+            async () => getCollectionHistory(await pool.getConnection()),
+            async () => getAccountsStageMap(await pool.getConnection()),
+            async () => getFinalTrtfStageMap(await pool.getConnection()),
+            async () => getDeleteStageMap(await pool.getConnection()),
+            async () => getNameMapResp(await pool.getConnection()),
+            async () => getPendingDataMap(await pool.getConnection()),
+            async () => getMainBookingsData(await pool.getConnection(), bookingLimit),
+            async () => getGuesttrackerData(await pool.getConnection()),
+        ], DB_QUERY_CONCURRENCY);
+
         const [
             bookingMaps,
             collectionHistoryLogs,
@@ -73,19 +104,10 @@ export async function GET() {
             deleteMap,
             names,
             pendDataMap,
-            newBookingData,
+            mainBookingResult,
             guesttrackerdata
-        ] = await Promise.all([
-            getBookingMapsOptimized(conn1, conn2),
-            getCollectionHistory(paymentConn),
-            getAccountsStageMap(accountsConn),
-            getFinalTrtfStageMap(finaltrtfConn),
-            getDeleteStageMap(deleteConn),
-            getNameMapResp(credConn),
-            getPendingDataMap(pendConn),
-            getMainBookingsData(mainConn),
-            getGuesttrackerData(guestconn)
-        ]);
+        ] = results;
+        const { rows: newBookingData, total: totalBookings } = mainBookingResult;
 
         const { piMap, autoReleasedMap, underAutoReleasedMap } = bookingMaps;
         const currentTime = new Date();
@@ -216,8 +238,8 @@ export async function GET() {
                     roomCategory: r.room_category,
                 },
                 programeName: r.prog_pkg_name,
-                arrivalDate: r.arrival_date ? new Date(r.arrival_date).toLocaleDateString("en-IN", { day: "2-digit", month: "long", year: "numeric" }) : "-",
-                departureDate: r.departure_date ? new Date(r.departure_date).toLocaleDateString("en-IN", { day: "2-digit", month: "long", year: "numeric" }) : "-",
+                arrivalDate: toIsoString(r.arrival_date),
+                departureDate: toIsoString(r.departure_date),
                 paymentDetails: {
                     amount: convertedAmt ? Math.round(convertedAmt) : convertedAmt,
                     amountOriginal: invoiceAmtRaw ? Math.round(invoiceAmtRaw) : invoiceAmtRaw,
@@ -291,7 +313,15 @@ export async function GET() {
                 emailToClient: r.nb_pgns_email_client_recv,
                 whatsappToStaff: r.nb_pgns_wa_btu_recv,
                 emailToStaff: r.nb_pgns_email_btu_recv,
-                status: getStatusFast(resId, accountsMap, autoReleasedMap, true, null, null, new Date(r.nb_bvs_actual)),
+                status: getStatusFast(
+                    resId,
+                    accountsMap,
+                    autoReleasedMap,
+                    true,
+                    null,
+                    null,
+                    r.nb_bvs_actual ? new Date(r.nb_bvs_actual).toISOString() : null,
+                ),
                 guestId: r.guest_id,
                 isAutoReleased: isAutoReleased ? "Auto Released" : isUnderAutoReleased ? "Under Auto Released" : false,
                 cancelByUserCheck: cancelledCheckForUser[0],
@@ -357,15 +387,58 @@ export async function GET() {
             }];
         });
 
-        return NextResponse.json({ bookings, pendingCounts, nameAliases: NAME_ALIASES });
+        const canViewAll =
+            sessionUser.permissions?.includes("all") ||
+            hasKtahvAction(sessionUser, "viewAll");
+        const visibleBookings = canViewAll
+            ? bookings
+            : bookings.filter((booking: any) =>
+                canViewKtahvBooking(
+                    sessionUser,
+                    booking.bookingDetails?.bookingTakenBy,
+                ),
+            );
+        const visiblePendingCounts = canViewAll
+            ? pendingCounts
+            : pendingCounts.filter((entry) =>
+                isOwnKtahvBooking(sessionUser, entry.employee),
+            );
+
+        return NextResponse.json({
+            bookings: visibleBookings,
+            pendingCounts: visiblePendingCounts,
+            nameAliases: NAME_ALIASES,
+            pagination: {
+                limit: bookingLimit,
+                returned: visibleBookings.length,
+                total: canViewAll ? totalBookings : visibleBookings.length,
+                truncated: canViewAll && totalBookings > bookingLimit,
+            },
+        });
 
     } catch (error: any) {
-        console.error(error);
-        return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+        console.error("[KTAHV bookings API]", error);
+        return NextResponse.json(
+            { success: false, error: "Unable to load bookings" },
+            { status: 500 },
+        );
     }
 }
 
 // ─── Stage helpers ────────────────────────────────────────────────────────────
+
+async function runInBatches<T>(
+    tasks: Array<() => Promise<T>>,
+    concurrency: number,
+): Promise<T[]> {
+    const results: T[] = [];
+    for (let index = 0; index < tasks.length; index += concurrency) {
+        results.push(...await Promise.all(
+            tasks.slice(index, index + concurrency).map((task) => task()),
+        ));
+    }
+    return results;
+}
 
 function createStageData(arr: StageRow[]) {
     return Object.fromEntries(
@@ -650,8 +723,15 @@ async function getPendingDataMap(conn: any): Promise<Record<string, any>> {
     }
 }
 
-async function getMainBookingsData(conn: any): Promise<any[]> {
+async function getMainBookingsData(
+    conn: any,
+    limit: number,
+): Promise<{ rows: any[]; total: number }> {
     try {
+        const [[countRow]] = await conn.execute(`
+            SELECT COUNT(*) AS total
+            FROM ktahv_bookings_fms_v3_part1
+        `);
         const [rows] = await conn.execute(`
             SELECT nb.*,
                 nbs.nb_bvs_action_status, nbs.nb_bvs_doer_remarks, nbs.nb_bvs_actual,
@@ -661,13 +741,17 @@ async function getMainBookingsData(conn: any): Promise<any[]> {
             LEFT JOIN ktahv_bookings_fms_v3_nb_booking_verification_stage nbs
                 ON nb.reservation_id = nbs.reservation_id
             ORDER BY timestamp DESC
-        `);
-        return rows;
+            LIMIT ?
+        `, [limit]);
+        return {
+            rows,
+            total: Number(countRow?.total || 0),
+        };
     } finally {
         conn?.release();
     }
 }
-async function getGuesttrackerData(guestconn: any): Promise<any[]> {
+async function getGuesttrackerData(guestconn: any): Promise<Record<string, Record<string, unknown>>> {
     try {
         const [rows] = await guestconn.execute(`
             SELECT 
@@ -699,7 +783,7 @@ async function getGuesttrackerData(guestconn: any): Promise<any[]> {
             LEFT JOIN ktahv_bookings_fms_v3_part1 nb
             ON nb.reservation_id = gt.booking_id COLLATE utf8mb4_unicode_ci
             `);
-        let datamap = {};
+        const datamap: Record<string, Record<string, unknown>> = {};
         for (let i = 0; i < rows.length; i++) {
             let r = rows[i];
             datamap[String(r.booking_id).trim()] = {
@@ -744,6 +828,12 @@ function normalizeName(name: unknown): string {
         .split(" ")
         .map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
         .join(" ");
+}
+
+function toIsoString(value: unknown): string {
+    if (!value) return "";
+    const date = value instanceof Date ? value : new Date(String(value));
+    return Number.isNaN(date.getTime()) ? "" : date.toISOString();
 }
 
 function resolveCanonicalName(

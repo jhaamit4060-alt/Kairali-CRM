@@ -68,8 +68,6 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
-// Your Google Apps Script URL - REPLACE WITH YOUR ACTUAL URL
-const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzDC3m9yUuTeCska7osn17tIxixwtEt-sN_7tFLi9f8Yb34l9qEcxPg1dCF5KCwvH-i/exec"
 //"approvalAll", "collectionAll",
 // Action permissions configuration
 const actionPermissionsByPageByRole: Record<string, Record<string, string[]>> = {
@@ -219,97 +217,41 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [rolePermissions, setRolePermissions] = useState<Record<string, string[]>>(fallbackRolePermissions)
   const [users, setUsers] = useState<User[]>([])
 
-  // Load role permissions from Google Sheets
+  // Role permissions used for administration screens. The authenticated user's
+  // effective permissions always come from the signed server session.
   const loadRolePermissions = async () => {
-    try {
-      const url = new URL(SCRIPT_URL)
-      url.searchParams.append("action", "getRolePermissions")
-
-      const response = await fetch(url.toString())
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-      const contentType = response.headers.get("content-type");
-      if (!contentType || !contentType.includes("application/json")) {
-        throw new TypeError("Response is not JSON");
-      }
-      const data = await response.json()
-
-      if (data.success && data.rolePermissions) {
-        setRolePermissions(data.rolePermissions)
-        console.log("✅ Role permissions loaded from Google Sheets")
-
-        // Cache the permissions
-        localStorage.setItem("cached_role_permissions", JSON.stringify({
-          data: data.rolePermissions,
-          timestamp: Date.now()
-        }))
-
-        return data.rolePermissions
-      } else {
-        console.warn("⚠️ Failed to load permissions from sheet, using fallback")
-        return fallbackRolePermissions
-      }
-    } catch (error) {
-      console.error("❌ Error loading role permissions:", error)
-      console.log("📌 Using fallback permissions")
-      return fallbackRolePermissions
-    }
+    return fallbackRolePermissions
   }
 
   // Refresh permissions manually
   const refreshPermissions = async () => {
-    const newPermissions = await loadRolePermissions()
-
-    // If user is logged in, update their permissions
-    if (user && user.email) {
-      const updatedUser = {
-        ...user,
-        permissions: newPermissions[user.email] || user.permissions
-      }
-      setUser(updatedUser)
-      localStorage.setItem("kairali_user", JSON.stringify(updatedUser))
-      toast.success("Permissions updated")
+    const response = await fetch("/api/auth/me", { cache: "no-store" })
+    if (!response.ok) {
+      throw new Error("Unable to refresh permissions")
     }
+    const data = await response.json()
+    setUser(data.user)
+    localStorage.setItem("kairali_user", JSON.stringify(data.user))
+    toast.success("Permissions updated")
   }
 
-  // Initialize: Load permissions and user
+  // Initialize from the signed HttpOnly session. localStorage is only a display
+  // cache and is never trusted as the source of authentication or authorization.
   useEffect(() => {
     const initAuth = async () => {
-      // Try to load cached permissions first (faster)
-      const cached = localStorage.getItem("cached_role_permissions")
-      if (cached) {
-        try {
-          const { data, timestamp } = JSON.parse(cached)
-          const cacheAge = Date.now() - timestamp
-          const ONE_HOUR = 60 * 60 * 1000
-
-          if (cacheAge < ONE_HOUR) {
-            setRolePermissions(data)
-            console.log("✅ Using cached role permissions")
-          }
-        } catch (e) {
-          console.warn("⚠️ Failed to parse cached permissions")
-        }
-      }
-
-      // Load fresh permissions in background
-      loadRolePermissions()
-
-      // Load stored user (UI state only — the real session lives in the HttpOnly
-      // cookie set by /api/auth/login; this local copy just avoids a flash of
-      // logged-out UI while middleware/API auth independently verify the cookie)
-      const storedUser = localStorage.getItem("kairali_user")
-      if (storedUser) {
-        try {
-          const userData = JSON.parse(storedUser)
-          setUser(userData)
-        } catch (e) {
-          console.error("Failed to parse stored user")
+      try {
+        const response = await fetch("/api/auth/me", { cache: "no-store" })
+        if (response.ok) {
+          const data = await response.json()
+          setUser(data.user)
+          localStorage.setItem("kairali_user", JSON.stringify(data.user))
+        } else {
+          setUser(null)
           localStorage.removeItem("kairali_user")
         }
+      } catch {
+        setUser(null)
       }
-
       setIsLoading(false)
     }
 
@@ -326,21 +268,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       const data = await response.json()
 
-      if (data.success && data.user) {
-        // Set permissions from dynamically loaded rolePermissions
-        if (data.user.email && rolePermissions[data.user.email]) {
-          data.user.permissions = rolePermissions[data.user.email]
-        } else {
-          // Fallback to permissions from server or empty array
-          data.user.permissions = data.user.permissions || []
-        }
-        // if (data.user.role && rolePermissions[data.user.role]) {
-        //   data.user.permissions = rolePermissions[data.user.role]
-        // } else {
-        //   // Fallback to permissions from server or empty array
-        //   data.user.permissions = data.user.permissions || []
-        // }
-
+    if (data.success && data.user) {
+        data.user.permissions = data.user.permissions || []
         data.user.action = data.user.action || {}
 
         setUser(data.user)

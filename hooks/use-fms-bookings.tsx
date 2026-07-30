@@ -139,10 +139,10 @@ export interface Booking {
   piHistoryLink: string;
   bSource: string;
   collectionHistory: any[];
-  salesPersonStage: Map<string, string>;
-  accountsPersonStage: Map<string, string>;
-  foPersonStage: Map<string, string>;
-  checkOutPersonStage: Map<string, string>;
+  salesPersonStage: Record<string, BookingStage>;
+  accountsPersonStage: Record<string, BookingStage>;
+  foPersonStage: Record<string, BookingStage>;
+  checkOutPersonStage: Record<string, BookingStage>;
   arrivalTime?: string
   arrivalMode?: string
   arrivalPickup?: string
@@ -153,6 +153,10 @@ export interface Booking {
   mlRemarks?: string
   isEditedOneTime?: boolean
   rawItem?: any;
+  checkoutVerificationStatus?: string;
+  checkoutVerificationRemarks?: string;
+  paymentReceiptNumber?: string;
+  cancelledAt?: string;
 
   // Guest tracker data (from ktahv_guest_tracker)
   guesttrackerdata?: {
@@ -184,6 +188,19 @@ export interface Booking {
       departure_counts_st1: string;
     };
   };
+}
+
+export interface BookingStage {
+  planned?: string;
+  actual?: string;
+  delay?: string;
+  doer?: string;
+  status?: string;
+  remarks?: string;
+  amount?: string | number;
+  actualAmount?: string | number;
+  pmsBlockStatus?: string;
+  informed?: string;
 }
 
 export interface PendingCount {
@@ -240,7 +257,8 @@ const normalizeSource = (s?: string | null) => {
 export function useBookings() {
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<any>(null);
+  const [error, setError] = useState<Error | null>(null);
+  const [isTruncated, setIsTruncated] = useState(false);
   const [pendingCount, setPendingCount] = useState<PendingCount[]>([]);
   const [nameAliases, setNameAliases] = useState<{ [key: string]: string }>({});
   const [refreshToken, setRefreshToken] = useState(0);
@@ -261,6 +279,7 @@ export function useBookings() {
     async function fetchData() {
       try {
         setLoading(true);
+        setError(null);
 
         const SCRIPT_URL = "/api/ktahv-bookings";
         const MAX_RETRIES = 5;
@@ -304,6 +323,7 @@ export function useBookings() {
 
         const data = json?.bookings || [];
         setNameAliases(json?.nameAliases || {});
+        setIsTruncated(Boolean(json?.pagination?.truncated));
 
         const formatted: Booking[] = data.map((item: any) => {
           try {
@@ -450,10 +470,10 @@ export function useBookings() {
               accountsDelay: item?.accountsDelay || "",
               foDelay: item?.foDelay || "",
               paymentDelay: item?.paymentDelay || "",
-              salesPersonStage: item?.salesPersonStage || new Map<string, string>(),
-              accountsPersonStage: item?.accountsPersonStage || new Map<string, string>(),
-              foPersonStage: item?.foPersonStage || new Map<string, string>(),
-              checkOutPersonStage: item?.checkoutPersonStage || new Map<string, string>(),
+              salesPersonStage: item?.salesPersonStage || {},
+              accountsPersonStage: item?.accountsPersonStage || {},
+              foPersonStage: item?.foPersonStage || {},
+              checkOutPersonStage: item?.checkoutPersonStage || {},
               // Travel Details
               arrivalTime: item?.travelDetails?.arrivalTime || "",
               arrivalMode: item?.travelDetails?.arrivalMode || "",
@@ -524,7 +544,7 @@ export function useBookings() {
       } catch (err) {
         console.error(err);
         if (isMounted) {
-          setError(err);
+          setError(err instanceof Error ? err : new Error("Unable to load bookings"));
         }
       } finally {
         if (isMounted) {
@@ -548,5 +568,14 @@ export function useBookings() {
     };
   }, [refreshToken]);
 
-  return { bookings, setBookings, pendingCount, nameAliases, loading, error, refetch };
+  return {
+    bookings,
+    setBookings,
+    pendingCount,
+    nameAliases,
+    loading,
+    error,
+    isTruncated,
+    refetch,
+  };
 }

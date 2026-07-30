@@ -1,14 +1,36 @@
 import mysql from 'mysql2/promise'
 
-const DB_CONFIG = {
-  host: '165.22.220.165',
-  port: 3306,
-  database: 'spalabsdomain_Kairali_CRM_Db',
-  user: 'spalabsdomain_developer',
-  password: 'Kai#ra$li@123!',
-  waitForConnections: true,
-  connectionLimit: 10,
-  connectTimeout: 30000,
+function requiredEnv(name: string): string {
+  const value = process.env[name]?.trim()
+  if (!value) {
+    throw new Error(`Missing required environment variable: ${name}`)
+  }
+  return value
+}
+
+function positiveIntegerEnv(name: string, fallback: number): number {
+  const raw = process.env[name]?.trim()
+  if (!raw) return fallback
+  const value = Number(raw)
+  if (!Number.isInteger(value) || value <= 0) {
+    throw new Error(`${name} must be a positive integer`)
+  }
+  return value
+}
+
+function getDbConfig(): mysql.PoolOptions {
+  return {
+    host: requiredEnv('DB_HOST'),
+    port: positiveIntegerEnv('DB_PORT', 3306),
+    database: requiredEnv('DB_NAME'),
+    user: requiredEnv('DB_USER'),
+    password: requiredEnv('DB_PASSWORD'),
+    waitForConnections: true,
+    connectionLimit: positiveIntegerEnv('DB_CONNECTION_LIMIT', 10),
+    queueLimit: positiveIntegerEnv('DB_QUEUE_LIMIT', 50),
+    connectTimeout: positiveIntegerEnv('DB_CONNECT_TIMEOUT_MS', 30000),
+    enableKeepAlive: true,
+  }
 }
 
 declare global {
@@ -16,14 +38,9 @@ declare global {
 }
 
 export async function getPool(): Promise<mysql.Pool> {
-
   if (global._sqlPool) return global._sqlPool
 
-  console.log('[DB] Connecting to:', DB_CONFIG.host, DB_CONFIG.database)
-
-  global._sqlPool = mysql.createPool(DB_CONFIG)
-
-  console.log('[DB] Connected!')
+  global._sqlPool = mysql.createPool(getDbConfig())
 
   return global._sqlPool
 }
