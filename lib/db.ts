@@ -1,16 +1,21 @@
 import mysql from 'mysql2/promise'
 
+function requireEnv(name: string): string {
+  const value = process.env[name]
+  if (!value) throw new Error(`${name} is not set — check .env.local (dev) or Vercel project env vars (prod).`)
+  return value
+}
+
 const DB_CONFIG = {
-  host: '165.22.220.165',
-  port: 3306,
-  database: 'spalabsdomain_Kairali_CRM_Db',
-  user: 'spalabsdomain_developer',
-  password: 'Kai#ra$li@123!',
+  host: requireEnv('DB_HOST'),
+  port: Number(process.env.DB_PORT || 3306),
+  database: requireEnv('DB_NAME'),
+  user: requireEnv('DB_USER'),
+  password: requireEnv('DB_PASSWORD'),
   waitForConnections: true,
   connectionLimit: 10,
   connectTimeout: 30000,
 }
-
 declare global {
   var _sqlPool: mysql.Pool | undefined
 }
