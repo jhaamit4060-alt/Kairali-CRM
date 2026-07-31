@@ -13,7 +13,7 @@ const STAGE_ACTIONS: Record<number, string> = {
     2: "foStatusUpdate2",
 };
 
-const UPSTREAM_TIMEOUT_MS = 20_000;
+const UPSTREAM_TIMEOUT_MS = 90_000;
 
 export async function POST(req: NextRequest) {
     // Same-origin, authenticated proxy: browser can no longer reach the GAS
