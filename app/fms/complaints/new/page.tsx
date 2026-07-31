@@ -28,7 +28,6 @@ export default function NewComplaintPage() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     // Handle form submission
-    console.log("New complaint:", formData)
     alert("Complaint registered successfully!")
   }
 

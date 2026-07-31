@@ -893,7 +893,6 @@ export default function BookingForm({ bookingId, formType = "individual", onSucc
         const bookingKey = Object.keys(raw)[0];
         const bd = raw[bookingKey];
         if (!bd) return;
-        console.log("LOADED BOOKING DATA (bd):", JSON.stringify(bd, null, 2));
 
         // ── Shared normalizers for TouchQ/API prefill ────────────────────────
         // <input type="date"> only accepts yyyy-mm-dd. TouchQ returns full date
@@ -1074,11 +1073,8 @@ export default function BookingForm({ bookingId, formType = "individual", onSucc
             healthInformation: pick('health-information', 'healthInformation') || prev.healthInformation,
             testReports: pick('uploadTestReport', 'test-reports', 'testReports') || prev.testReports,
           }));
-          // One-time diagnostic: if Client Category/Type still come back empty,
-          // this prints the exact raw keys the backend actually sent for this
-          // booking, so the pick() list above can be extended to match.
           if (!pick('client-category', 'clientCategory', 'ClientCategory') || !pick('client-type', 'clientType', 'ClientType')) {
-            console.warn('[BookingForm] Additional Info prefill: clientCategory/clientType not found. Raw keys received:', Object.keys(ai));
+            console.warn('[BookingForm] Additional Info prefill: clientCategory/clientType not found.');
           }
         }
 
@@ -1243,7 +1239,6 @@ export default function BookingForm({ bookingId, formType = "individual", onSucc
     loadBookingById();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bookingId, apiData]);
-  // console.log('BookingForm state:', { bookingId, bookingType, step, primaryGuest, primaryBookingDetails, secondaryGuests, children, groupInfo, groupRooms, groupGuests, additionalInfo, travelAgent, advancePayment, approval });
   // Sync group rooms from API data when pax changes
   useEffect(() => {
     const n = parseInt(groupInfo.pax) || 0;
@@ -1419,7 +1414,6 @@ export default function BookingForm({ bookingId, formType = "individual", onSucc
       advancePayment: advancePaymentPayload,
       approval: approvalPayload,
     };
-    console.log(JSON.stringify(payload));
     // debugger
     try {
       const res = await fetch(SUBMIT_API, { method: "POST", body: JSON.stringify(payload) });
@@ -1427,8 +1421,6 @@ export default function BookingForm({ bookingId, formType = "individual", onSucc
         throw new Error(`Server returned HTTP ${res.status}: ${res.statusText}`);
       }
       const resData = await res.json().catch(() => null);
-      console.log("HTTP status:", res.status, res.statusText);
-      console.log("SUBMIT RESPONSE DATA:", resData);
 
       const isSuccess = resData && (
         resData.success === true ||
@@ -2638,7 +2630,6 @@ export default function BookingForm({ bookingId, formType = "individual", onSucc
 //     loadBookingById();
 //     // eslint-disable-next-line react-hooks/exhaustive-deps
 //   }, [bookingId, apiData]);
-//   // console.log('BookingForm state:', { bookingId, bookingType, step, primaryGuest, primaryBookingDetails, secondaryGuests, children, groupInfo, groupRooms, groupGuests, additionalInfo, travelAgent, advancePayment, approval });
 //   // Sync group rooms from API data when pax changes
 //   useEffect(() => {
 //     const n = parseInt(groupInfo.pax) || 0;

@@ -65,6 +65,7 @@ export function useLeadTargetReport({
 }: UseLeadTargetReportParams) {
     const [rawData, setRawData] = useState<any>(cachedApiData)
     const [loading, setLoading] = useState(!cachedApiData)
+    const [error, setError] = useState<string | null>(null)
 
     /* ---------- FETCH API (CACHED) ---------- */
     useEffect(() => {
@@ -73,7 +74,22 @@ export function useLeadTargetReport({
         async function fetchData() {
             try {
                 if (!cachedPromise) {
-                    cachedPromise = fetch(API_URL).then((res) => res.json())
+                    const pending = fetch(API_URL).then((res) => {
+                        if (!res.ok) {
+                            throw new Error(
+                                `Lead Target API request failed: ${res.status} ${res.statusText}`
+                            )
+                        }
+                        return res.json()
+                    })
+
+                    // Drop the cached promise if it rejects so a later mount can retry
+                    // instead of reusing a permanently failed request.
+                    pending.catch(() => {
+                        if (cachedPromise === pending) cachedPromise = null
+                    })
+
+                    cachedPromise = pending
                 }
 
                 const json = await cachedPromise
@@ -81,10 +97,18 @@ export function useLeadTargetReport({
 
                 if (mounted) {
                     setRawData(json)
+                    setError(null)
                 }
-            } catch (error) {
-                console.error("Lead Target API Error:", error)
-                if (mounted) setRawData(null)
+            } catch (err) {
+                console.error("Lead Target API Error:", err)
+                if (mounted) {
+                    setRawData(null)
+                    setError(
+                        err instanceof Error
+                            ? err.message
+                            : "Lead Target API request failed"
+                    )
+                }
             } finally {
                 if (mounted) setLoading(false)
             }
@@ -144,5 +168,6 @@ export function useLeadTargetReport({
         dailyReport: result.dailyReport,
         totals: result.totals,
         loading,
+        error,
     }
 }

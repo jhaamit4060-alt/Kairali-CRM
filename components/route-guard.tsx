@@ -63,7 +63,6 @@ export default function RouteGuard({ children }: { children: React.ReactNode }) 
 
     // Allow access to login page for all users
     if (pathname === '/') return
-    console.log('check for path', pathname)
     // Check if current path requires permission
     const requiredPermission = pagePermissions[pathname]
 

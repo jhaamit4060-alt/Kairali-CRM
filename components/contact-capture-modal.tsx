@@ -1277,9 +1277,7 @@ export default function ContactCaptureModal({ isOpen, onClose, onSubmit, initial
 
 export function ContactCaptureButton() {
   const [open, setOpen] = useState(false);
-  const handleSubmit = (data: ContactCaptureData) => {
-    console.log('Contact captured:', data);
-  };
+  const handleSubmit = (_data: ContactCaptureData) => {};
   return (
     <>
       <button onClick={() => setOpen(true)}

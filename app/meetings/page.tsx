@@ -894,9 +894,7 @@ export default function MeetingFMS() {
           const result = await getAudioStreamWithExtension()
           tabStream = result.stream
           captureMethod = result.method
-          console.log('[Kairali] Using extension tabCapture — no popup needed')
         } catch (extErr: any) {
-          console.log('[Kairali] Extension not available, using getDisplayMedia:', extErr.message)
           const displayStream = await navigator.mediaDevices.getDisplayMedia({
             video: true,
             audio: { echoCancellation: true, noiseSuppression: true } as any,
@@ -1054,8 +1052,6 @@ export default function MeetingFMS() {
     const audioBlob = new Blob(audioChunks.current, { type: 'audio/webm' })
     audioBlobRef.current = audioBlob
 
-    console.log(`[Recording] Blob size: ${(audioBlob.size / 1024).toFixed(1)}KB, chunks: ${audioChunks.current.length}`)
-
     if (audioBlob.size < 1024) {
       // Less than 1KB — almost certainly silent or empty
       setRecErrorMsg(
@@ -1164,9 +1160,6 @@ export default function MeetingFMS() {
             const result = await compressAudio(audioBlob, (p: CompressProgress) => setCompressProg(p.percent))
             uploadBlob = result.blob
             fileExt    = result.compressed ? 'mp3' : 'webm'
-            if (result.compressed) {
-              console.log(`[Compress] ${(result.originalSize/1024/1024).toFixed(1)}MB → ${(result.compressedSize/1024/1024).toFixed(1)}MB`)
-            }
           } catch (e) {
             console.warn('[Compress] skipped:', e)
           } finally {
@@ -1450,7 +1443,6 @@ export default function MeetingFMS() {
     try {
       var newUrl = new URL(GAS_URL)
       newUrl.searchParams.set('action', action)
-      console.log('Calling GAS with', JSON.stringify({ action, tasks }))
       const res = await fetch(newUrl, {
         method: 'POST',
         body: JSON.stringify({ action, tasks }),
@@ -2818,10 +2810,10 @@ export default function MeetingFMS() {
         {/* ── Participants Modal ─────────────────────────────────────────────── */}
         <Modal open={!!pPopup} onClose={() => setPPopup(null)} title={`👥 Participants — ${pPopup?.m?.title}`}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {pPopup?.m?.pa.map((p, i) => (
+            {(pPopup?.m?.pa ?? []).map((p, i) => (
               <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', borderRadius: 10, background: '#f8fafc', border: '1px solid #e2e8f0' }}>
                 <div style={{ width: 36, height: 36, borderRadius: '50%', background: 'linear-gradient(135deg,#0C447C,#1d4ed8)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 700, flexShrink: 0 }}>
-                  {p.name[0]}
+                  {p.name?.trim()?.[0]?.toUpperCase() || '?'}
                 </div>
                 <div>
                   <p style={{ fontSize: 13, fontWeight: 600, color: '#1e293b', margin: 0 }}>{p.name}</p>
@@ -2849,7 +2841,7 @@ export default function MeetingFMS() {
         {/* ── Action Items Modal ─────────────────────────────────────────────── */}
         <Modal open={!!aPopup} onClose={() => setAPopup(null)} title={`✅ Action Items — ${aPopup?.m?.title}`} wide>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {aPopup?.m?.ai.map((a, i) => (
+            {(aPopup?.m?.ai ?? []).map((a, i) => (
               <div key={i} style={{ padding: '12px 14px', borderRadius: 10, background: '#f8fafc', border: '1px solid #e2e8f0' }}>
                 <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, marginBottom: 8 }}>
                   <p style={{ fontSize: 13, fontWeight: 500, color: '#1e293b', flex: 1, margin: 0 }}>{a.task}</p>
@@ -2866,7 +2858,7 @@ export default function MeetingFMS() {
         {/* ── Key Decisions Modal ────────────────────────────────────────────── */}
         <Modal open={!!dPopup} onClose={() => setDPopup(null)} title={`🔑 Key Decisions — ${dPopup?.m?.title}`} wide>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {dPopup?.m?.kd.map((d, i) => (
+            {(dPopup?.m?.kd ?? []).map((d, i) => (
               <div key={i} style={{ padding: '12px 14px', borderRadius: 10, background: '#f5f3ff', border: '1px solid #ede9fe', borderLeft: '3px solid #a78bfa' }}>
                 <p style={{ fontSize: 13, fontWeight: 600, color: '#1e293b', margin: '0 0 4px' }}>{d.decision}</p>
                 {d.context && <p style={{ fontSize: 12, color: '#64748b', margin: 0, lineHeight: 1.6 }}>{d.context}</p>}
@@ -2904,10 +2896,10 @@ export default function MeetingFMS() {
               {/* Action Items */}
               <div style={{ background: '#FFFBF0', border: '1px solid #fde68a', borderRadius: 12, padding: '14px 18px' }}>
                 <p style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#854F0B', marginBottom: 10 }}>
-                  ✅ Action Items <span style={{ marginLeft: 6, background: '#fde68a', color: '#854F0B', padding: '1px 7px', borderRadius: 20, fontSize: 10 }}>{nPopup.m.ai.length}</span>
+                  ✅ Action Items <span style={{ marginLeft: 6, background: '#fde68a', color: '#854F0B', padding: '1px 7px', borderRadius: 20, fontSize: 10 }}>{(nPopup.m.ai ?? []).length}</span>
                 </p>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  {nPopup.m.ai.map((a, i) => (
+                  {(nPopup.m.ai ?? []).map((a, i) => (
                     <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, background: '#fff', border: '1px solid #fde68a', borderRadius: 8, padding: '10px 12px' }}>
                       <span className={`text-[10px] font-bold uppercase px-1.5 py-0.5 rounded border flex-shrink-0 mt-0.5 ${PRIORITY_COLOR[a.priority]}`}>{a.priority}</span>
                       <div>
@@ -2921,10 +2913,10 @@ export default function MeetingFMS() {
               {/* Key Decisions */}
               <div style={{ background: '#f5f3ff', border: '1px solid #c4b5fd', borderRadius: 12, padding: '14px 18px' }}>
                 <p style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#5b21b6', marginBottom: 10 }}>
-                  🔑 Key Decisions <span style={{ marginLeft: 6, background: '#c4b5fd', color: '#5b21b6', padding: '1px 7px', borderRadius: 20, fontSize: 10 }}>{nPopup.m.kd.length}</span>
+                  🔑 Key Decisions <span style={{ marginLeft: 6, background: '#c4b5fd', color: '#5b21b6', padding: '1px 7px', borderRadius: 20, fontSize: 10 }}>{(nPopup.m.kd ?? []).length}</span>
                 </p>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  {nPopup.m.kd.map((d, i) => (
+                  {(nPopup.m.kd ?? []).map((d, i) => (
                     <div key={i} style={{ background: '#fff', border: '1px solid #ede9fe', borderLeft: '3px solid #a78bfa', borderRadius: 8, padding: '10px 14px' }}>
                       <p style={{ fontSize: 12, fontWeight: 600, color: '#1e293b', margin: '0 0 3px' }}>{d.decision}</p>
                       {d.context && <p style={{ fontSize: 11, color: '#64748b', margin: 0, lineHeight: 1.6 }}>{d.context}</p>}
@@ -2935,12 +2927,12 @@ export default function MeetingFMS() {
               {/* Participants */}
               <div style={{ background: '#ecfdf5', border: '1px solid #6ee7b7', borderRadius: 12, padding: '14px 18px' }}>
                 <p style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#166534', marginBottom: 10 }}>
-                  👥 Participants <span style={{ marginLeft: 6, background: '#6ee7b7', color: '#166534', padding: '1px 7px', borderRadius: 20, fontSize: 10 }}>{nPopup.m.pa.length}</span>
+                  👥 Participants <span style={{ marginLeft: 6, background: '#6ee7b7', color: '#166534', padding: '1px 7px', borderRadius: 20, fontSize: 10 }}>{(nPopup.m.pa ?? []).length}</span>
                 </p>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                  {nPopup.m.pa.map((p, i) => (
+                  {(nPopup.m.pa ?? []).map((p, i) => (
                     <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#fff', border: '1px solid #a7f3d0', borderRadius: 8, padding: '8px 12px' }}>
-                      <div style={{ width: 26, height: 26, borderRadius: '50%', background: '#059669', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700 }}>{p.name[0]}</div>
+                      <div style={{ width: 26, height: 26, borderRadius: '50%', background: '#059669', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700 }}>{p.name?.trim()?.[0]?.toUpperCase() || '?'}</div>
                       <div>
                         <p style={{ fontSize: 12, fontWeight: 600, color: '#1e293b', margin: 0 }}>{p.name}</p>
                         <p style={{ fontSize: 10, color: '#94a3b8', margin: 0, textTransform: 'capitalize' }}>{p.role}</p>
@@ -2954,7 +2946,6 @@ export default function MeetingFMS() {
                 <p style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#1d4ed8', marginBottom: 8 }}>📝 Transcript</p>
                 <p style={{ fontSize: 13, color: '#1e293b', lineHeight: 1.7, margin: 0 }}>
                   {nPopup?.m.transcript || 'No transcript available for this meeting.'}
-                  <>{console.log(nPopup)}</>
                 </p>
               </div>
               {/* Diarized Transcript
@@ -3348,12 +3339,6 @@ export default function MeetingFMS() {
                                   )
                                 })()}
 
-                                <>{console.log(mid, origIdx, Boolean((t as any)._db_id) &&
-                                  Boolean(
-                                    taskActions[`delegate-${mid}-${origIdx}`] ||
-                                    taskActions[`ht-${mid}-${origIdx}`] ||
-                                    taskActions[`email-${mid}-${origIdx}`]
-                                  ))}</>
                               </div>
 
 

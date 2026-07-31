@@ -2300,8 +2300,7 @@ export default function MRFMSDashboard() {
             setIsMRCheckOpen(false)
             setMrCheckLead(null)
           }}
-          onSubmit={(data) => {
-            console.log("MRDataCheck submitted for lead:", mrCheckLead.id, data)
+          onSubmit={() => {
             // TODO: yahan apna API call lagao
           }}
           planned={mrCheckLead.planned}

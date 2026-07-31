@@ -102,7 +102,7 @@ async function getDataById_NewXXXX(currentTextId: any, formType: any, addeditcon
                     p2.ddl_tpt,
                     p2.txt_DateOfBirth,
                     p2.txt_tpt_note,
-                    p2. ddl_srcof_client,
+                    p2. ddl_srcof_client AS data_source,
                     p2.txt_Date_Of_Anniversary1,
                     p3.child_txt_first_name1,
                     p3.child_txt_Last_name1,
@@ -120,8 +120,8 @@ async function getDataById_NewXXXX(currentTextId: any, formType: any, addeditcon
                     p3.child_txt_Last_name5,
                     p3.child_txt_Age5,
                     p3.ddl_Title1,p3.txt_Family_Name1,p3.txt_First_Name1,p3.ddl_gender1,p3.txt_DateOfBirth1,p3.txt_Age1,p3.txt_DateOfAnniversary2,p3.txt_Nationality1 ,p3.ddl_Country2,p3.ddl_States2 ,p3.txt_Home_Address1 ,p3.txt_Postal_Code1 ,p3.txt_Code2 ,p3.txt_TelephoneNo1 ,p3.txt_Email_ID1 ,p3.txt_Home_Fascimile1 ,p3.txt_Arrival2 ,p3.txt_Departure2 ,p3.txt_nights2 ,p3.ddl_Packages2 ,p3.ddl_relationship1 ,
-                    p3.ddl_Title2 ,p3.txt_FamilyName2 ,p3.txt_FirstName2 ,p3.ddl_gender2 ,p3.txt_DateOfBirth2 ,p3.txt_Age2  ,p3.txt_DateOfAnniversary3 ,p3.txt_Nationality2 ,p3.ddl_Country3 ,p3.ddl_States3 ,p3.txt_HomeAddress2 ,p3.txt_PostalCode2 ,p3.txt_Code3 ,p3.txt_Telephone_No2 ,p3.txt_Email_ID2 ,p3.txt_Home_Fascimile2 ,p3.txt_Arrival3 ,p3.txt_Departure3 ,p3.txt_nights3 ,p3.ddl_Packages3 ,p3.ddl_relationship2 ,
-                    p3.ddl_Title3 ,p3.txt_Family_Name3 ,p3.txt_First_Name3 ,p3.ddl_gender3 ,p3.txt_DateOfBirth3 ,p3.txt_Age3 ,p3.txt_DateOfAnniversary4 ,p3.txt_Nationality3 ,p3.ddl_Country4 ,p3.ddl_States4 ,p3.txt_HomeAddress3 ,p3.txt_PostalCode3 ,p3.txt_Code4 ,p3.txt_TelephoneNo3 ,p3.txt_EmailID3 ,p3.txt_HomeFascimile3 ,p3.txt_Arrival4 ,p3.txt_Departure4 ,p3.txt_nights4 ,p3.ddl_Packages4 ,p3.ddl_relationship3 
+                    p3.ddl_Title2 ,p3.txt_FamilyName2 AS txt_Family_Name2 ,p3.txt_FirstName2 AS txt_First_Name2 ,p3.ddl_gender2 ,p3.txt_DateOfBirth2 ,p3.txt_Age2  ,p3.txt_DateOfAnniversary3 ,p3.txt_Nationality2 ,p3.ddl_Country3 ,p3.ddl_States3 ,p3.txt_HomeAddress2 AS txt_Home_Address2 ,p3.txt_PostalCode2 AS txt_Postal_Code2 ,p3.txt_Code3 ,p3.txt_Telephone_No2 AS txt_TelephoneNo2 ,p3.txt_Email_ID2 ,p3.txt_Home_Fascimile2 ,p3.txt_Arrival3 ,p3.txt_Departure3 ,p3.txt_nights3 ,p3.ddl_Packages3 ,p3.ddl_relationship2 ,
+                    p3.ddl_Title3 ,p3.txt_Family_Name3 ,p3.txt_First_Name3 ,p3.ddl_gender3 ,p3.txt_DateOfBirth3 ,p3.txt_Age3 ,p3.txt_DateOfAnniversary4 ,p3.txt_Nationality3 ,p3.ddl_Country4 ,p3.ddl_States4 ,p3.txt_HomeAddress3 AS txt_Home_Address3 ,p3.txt_PostalCode3 AS txt_Postal_Code3 ,p3.txt_Code4 ,p3.txt_TelephoneNo3 ,p3.txt_EmailID3 AS txt_Email_ID3 ,p3.txt_HomeFascimile3 ,p3.txt_Arrival4 ,p3.txt_Departure4 ,p3.txt_nights4 ,p3.ddl_Packages4 ,p3.ddl_relationship3
                     FROM ktahv_reservation_database_add_edit_part1 p1 
                     LEFT JOIN ktahv_reservation_database_add_edit_part2 p2 
                         ON p1.unique_key = p2.unique_key

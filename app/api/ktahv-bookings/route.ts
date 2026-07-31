@@ -1,4 +1,5 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
+import { verifySessionCookieValue } from "@/lib/session";
 import { getPool } from "@/lib/db";
 import { parseEnv } from "util";
 import AccountsTrackerPage from "@/app/accounts-tracker/page";
@@ -49,7 +50,24 @@ type EmpCounts = [number, number, number, number];
 
 // ─── Route Handler ────────────────────────────────────────────────────────────
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+    // This route exposes booking, guest, payment and invoice data, so it requires a
+    // valid signed browser session — authenticate before touching the pool, so an
+    // unauthenticated request never allocates DB connections.
+    // Deliberately not authorizeApiRequest: its MEASUREMENT_API_TOKEN bearer path
+    // must not grant access to KTAHV booking data.
+    let session: any = null;
+    try {
+        const userCookie = req.cookies.get("kairali_user")?.value;
+        session = userCookie ? verifySessionCookieValue(userCookie) : null;
+    } catch {
+        session = null;
+    }
+    if (!session) {
+        // Generic message only — no cookie contents or validation details.
+        return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    }
+
     const pool = await getPool();
 
     // Acquire all connections up-front; released inside each helper's finally block

@@ -296,7 +296,6 @@ export default function LeadAssignmentPage() {
         const memCache = globalLeadsCache.get(cacheKey)
         if (memCache && (Date.now() - memCache.timestamp < CACHE_EXPIRY_MS)) {
           leadsData = memCache.data
-          console.log(`[Cache Hit] Global Memory: ${cacheKey}`)
         }
 
         // 2. Check IndexedDB if memory cache misses (survives hard refresh and has 1GB+ limit)
@@ -306,7 +305,6 @@ export default function LeadAssignmentPage() {
             if (idbCache && (Date.now() - idbCache.timestamp < CACHE_EXPIRY_MS)) {
               leadsData = idbCache.data;
               globalLeadsCache.set(cacheKey, idbCache); // Promote back to memory
-              console.log(`[Cache Hit] IndexedDB: ${cacheKey}`);
             }
           } catch (e) {
             console.warn("IndexedDB cache read error:", e)
@@ -316,7 +314,6 @@ export default function LeadAssignmentPage() {
 
       // 3. Network Fetch if all caches miss
       if (!leadsData) {
-        console.log(`[Cache Miss] Fetching network: ${requestUrl.toString()}`)
         const res = await fetch(requestUrl.toString(), {
           cache: force ? "no-store" : "default",
           headers: force ? { "Cache-Control": "no-cache" } : undefined,
@@ -324,7 +321,7 @@ export default function LeadAssignmentPage() {
         const data = await res.json()
 
         if (!data.success) {
-          console.error("Lead fetch failed", data)
+          console.error("Lead fetch failed")
           if (!silent) {
             setLocalLeadsLoaded(true)
             setIsFetchingMore(false)
@@ -497,9 +494,6 @@ export default function LeadAssignmentPage() {
         const res = await fetch(`/api/payment?${params.toString()}`)
         const json = await res.json()
         if (json.success) {
-          console.log('[DEBUG Payment] Keys:', Object.keys(json.data || {}))
-          const firstCompany = Object.keys(json.data || {})[0]
-          if (firstCompany) console.log('[DEBUG Payment] Dates for', firstCompany, ':', Object.keys(json.data[firstCompany]).slice(0, 3))
           setDbPaymentData(json.data || {})
         }
         else console.error('[Payment DB] Fetch failed:', json.error)
@@ -526,7 +520,6 @@ export default function LeadAssignmentPage() {
   //       const json = await res.json()
   //       if (json.success) {
   //         setDbConversionData(json.data || {})
-  //         console.log('[Conversion DB] API response:', {
   //           totalRows: json.totalRows,
   //           filterApplied: json.filterApplied,
   //           data: json.data || {},
@@ -584,11 +577,6 @@ export default function LeadAssignmentPage() {
   //     { verifiedCount: 0, verifiedAmount: 0, unverifiedCount: 0, cancelledQty: 0 }
   //   )
 
-  //   console.groupCollapsed('[Conversion DB] Counts used by Lead Assign page')
-  //   console.log('Current filters:', { selectedCompany, startDate, endDate })
-  //   console.log('Totals:', totals)
-  //   console.table(rows)
-  //   console.groupEnd()
   // }, [dbConversionData, selectedCompany, startDate, endDate])
 
   useEffect(() => {
@@ -601,11 +589,6 @@ export default function LeadAssignmentPage() {
         const json = await res.json()
         if (json.success) {
           setDbConversionData(json.data || {})
-          console.log('[Conversion DB] API response:', {
-            totalRows: json.totalRows,
-            filterApplied: json.filterApplied,
-            data: json.data || {},
-          })
         }
         else console.error('[Conversion DB] Fetch failed:', json.error)
       } catch (err) { console.error('[Conversion DB] Error:', err) }
@@ -659,12 +642,6 @@ export default function LeadAssignmentPage() {
       }),
       { verifiedCount: 0, verifiedAmount: 0, unverifiedCount: 0, cancelledQty: 0 }
     )
-
-    console.groupCollapsed('[Conversion DB] Counts used by Lead Assign page')
-    console.log('Current filters:', { selectedCompany, startDate, endDate })
-    console.log('Totals:', totals)
-    console.table(rows)
-    console.groupEnd()
   }, [dbConversionData, selectedCompany, startDate, endDate])
 
 
@@ -824,7 +801,6 @@ export default function LeadAssignmentPage() {
     }
     setExpandedDataSourceDates(newExpanded)
   }
-  console.log(conversion, spendData);
   // Initialize first date as expanded in Data Source Breakdown
 
   useEffect(() => {
@@ -903,8 +879,6 @@ export default function LeadAssignmentPage() {
       }
     }
   }, [filteredLeads])
-
-  console.log("Filtered Leads:", filteredLeads)
 
   // Helper to format date to DD-MM-YYYY
   const isConversionArray = (data: any): data is Array<{ key: string; value: any }> => {
@@ -1336,7 +1310,6 @@ export default function LeadAssignmentPage() {
           : `/api/leads?page=1&limit=999999&unassigned=true`;
 
         try {
-          console.log(`[Silent Prefetch] Downloading ${target} in background...`);
           const res = await fetch(url);
           const data = await res.json();
           if (data.success && data.data) {
@@ -1345,7 +1318,6 @@ export default function LeadAssignmentPage() {
             if (typeof window !== 'undefined') {
               try { setIDBCache(cacheKey, cacheEntry); } catch (e) { }
             }
-            console.log(`[Silent Prefetch] Downloaded and cached ${target}`);
           }
         } catch (e) {
           console.warn("Silent prefetch failed for " + target, e);
@@ -1509,7 +1481,6 @@ export default function LeadAssignmentPage() {
 
     // Urgency filter
     if (urgencyFilter !== "all") {
-      console.log('Applying urgency filter:', urgencyFilter);
       filtered = filtered.filter((lead) => {
         const isUrgent = lead.priority == "high" || lead.tatBreached
         return urgencyFilter == "yes" ? isUrgent : !isUrgent
@@ -2597,7 +2568,6 @@ Cancelled Amt:
   // Process spend data from hook
   // const processSpendData = () => {
   //   const spendMap = new Map<string, number>()
-  //   console.log(spendData)
   //   // Get spend data for selected company
   //   if (!spendData?.CampaignExp) return spendMap
 
@@ -7701,8 +7671,5 @@ Cancelled Amt:
 
   )
 }
-
-
-
 
 

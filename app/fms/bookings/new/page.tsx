@@ -130,7 +130,6 @@ export default function NewBookingPage() {
       stageUpdatedAt: new Date().toISOString(),
     }
 
-    console.log("New comprehensive booking:", newBooking)
     alert("Booking created successfully with all required fields!")
   }
 

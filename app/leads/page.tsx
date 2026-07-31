@@ -412,9 +412,9 @@ export default function LeadsPage() {
                 )}
 
                 <div>
-                  <Label>Remarks ({selectedLead.remarks.length})</Label>
+                  <Label>Remarks ({(selectedLead.remarks ?? []).length})</Label>
                   <div className="space-y-2 max-h-32 overflow-y-auto">
-                    {selectedLead.remarks.map((remark, index) => (
+                    {(selectedLead.remarks ?? []).map((remark, index) => (
                       <div key={index} className="text-sm p-2 bg-gray-50 rounded">
                         {remark}
                       </div>

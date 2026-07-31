@@ -6,6 +6,11 @@ import { useRouter } from "next/navigation"
 import { useBookings, Booking } from "@/hooks/use-fms-bookings"
 import { useAuth } from "@/hooks/use-auth"
 import { StageWisePendingsReport } from "@/components/fms/stage-wise-pendings"
+import {
+  BookingRowsPerPageSelect,
+  BOOKING_ROWS_PER_PAGE_OPTIONS,
+  DEFAULT_BOOKING_ROWS_PER_PAGE,
+} from "@/components/fms/bookings/booking-rows-per-page-select"
 import Image from "next/image";
 // import { lazy } from "react"
 // const StageWisePendingsReport = lazy(() =>
@@ -272,6 +277,41 @@ const mapBookingToDetail = (booking: Booking): any => {
 
 
 
+/** Per-user rows-per-page preferences for this page's bookings tables (KTAHV). */
+const KTAHV_ROWS_PER_PAGE_STORAGE_PREFIX = "ktahv_fms_team_bookings_rows_per_page"
+
+type RowsPerPageTable =
+  | "pending"
+  | "completed"
+  | "cancelled"
+  | "underAutoRelease"
+  | "autoReleased"
+  | "voucher"
+
+const ROWS_PER_PAGE_TABLES: RowsPerPageTable[] = [
+  "pending",
+  "completed",
+  "cancelled",
+  "underAutoRelease",
+  "autoReleased",
+  "voucher",
+]
+
+function defaultRowsPerPagePrefs(): Record<RowsPerPageTable, number> {
+  return {
+    pending: DEFAULT_BOOKING_ROWS_PER_PAGE,
+    completed: DEFAULT_BOOKING_ROWS_PER_PAGE,
+    cancelled: DEFAULT_BOOKING_ROWS_PER_PAGE,
+    underAutoRelease: DEFAULT_BOOKING_ROWS_PER_PAGE,
+    autoReleased: DEFAULT_BOOKING_ROWS_PER_PAGE,
+    voucher: DEFAULT_BOOKING_ROWS_PER_PAGE,
+  }
+}
+
+function isAllowedRowsPerPage(value: unknown): boolean {
+  return (BOOKING_ROWS_PER_PAGE_OPTIONS as readonly number[]).includes(Number(value))
+}
+
 export default function SalesAccountsTeamPage() {
   const [bookings, _setBookings] = useState<Booking[]>([])
 
@@ -358,8 +398,6 @@ export default function SalesAccountsTeamPage() {
   }, [setFetchedBookings]);
   const { user, hasActionPermission } = useAuth()
   const router = useRouter()
-  const [showLoader, setShowLoader] = useState(false)
-  const loaderStartRef = useRef<number | null>(null)
 
   const aliasLookup = useMemo(() => {
     const map: Record<string, string> = {};
@@ -500,26 +538,7 @@ export default function SalesAccountsTeamPage() {
     return false
   }
 
-  useEffect(() => {
-    if (loading) {
-      loaderStartRef.current = Date.now()
-      setShowLoader(true)
-    } else {
-      const start = loaderStartRef.current || 0
-      const elapsed = Date.now() - start
-      const minDisplay = 700
-
-      if (elapsed < minDisplay) {
-        const t = setTimeout(() => setShowLoader(false), minDisplay - elapsed)
-        return () => clearTimeout(t)
-      }
-      setShowLoader(false)
-    }
-  }, [loading])
-
-
   // useEffect(() => {
-  //   console.log("HOOK → fetchedBookings:", fetchedBookings);
   // }, [fetchedBookings]);
 
   /**
@@ -536,10 +555,11 @@ export default function SalesAccountsTeamPage() {
   // When hook returns data, replace the local sample data while preserving local updates thereafter.
   useEffect(() => {
     try {
-      if (Array.isArray(fetchedBookings) && fetchedBookings.length > 0) {
+      if (Array.isArray(fetchedBookings)) {
         // Filter bookings based on user permissions
         const permissionFilteredBookings = fetchedBookings.filter(booking => canUserViewBooking(booking))
-        // Replace sample data with API data unconditionally (we want API to show up)
+        // Apply every valid fetched array (including an empty one) so a genuinely
+        // empty server response clears stale rows instead of leaving them behind.
         _setBookings(permissionFilteredBookings)
       }
     } catch (e) {
@@ -563,11 +583,11 @@ export default function SalesAccountsTeamPage() {
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc")
   const [viewMode, setViewMode] = useState<"table" | "chart">("table")
   const [currentPage, setCurrentPage] = useState<number>(1)
-  const [itemsPerPage, setItemsPerPage] = useState<number>(5)
+  const [itemsPerPage, setItemsPerPage] = useState<number>(DEFAULT_BOOKING_ROWS_PER_PAGE)
 
   // Pagination state for completed bookings table
   const [completedCurrentPage, setCompletedCurrentPage] = useState<number>(1)
-  const [completedItemsPerPage, setCompletedItemsPerPage] = useState<number>(5)
+  const [completedItemsPerPage, setCompletedItemsPerPage] = useState<number>(DEFAULT_BOOKING_ROWS_PER_PAGE)
 
   const [searchInput, setSearchInput] = useState("");
   const [collectionTillNowArr, setcollectionTillNowArr] = useState<CollectionHistoryEntry | null>(null);
@@ -579,16 +599,103 @@ export default function SalesAccountsTeamPage() {
   const [tobeVerifiedCollections, setTobeVerifiedCollections] = useState<any[]>([]);
   // Cancelled bookings pagination
   const [cancelledCurrentPage, setCancelledCurrentPage] = useState<number>(1)
-  const [cancelledItemsPerPage, setCancelledItemsPerPage] = useState<number>(5)
+  const [cancelledItemsPerPage, setCancelledItemsPerPage] = useState<number>(DEFAULT_BOOKING_ROWS_PER_PAGE)
   // Under Auto Release Pagination
   const [underAutoCurrentPage, setUnderAutoCurrentPage] = useState<number>(1)
-  const [underAutoItemsPerPage, setUnderAutoItemsPerPage] = useState<number>(5)
+  const [underAutoItemsPerPage, setUnderAutoItemsPerPage] = useState<number>(DEFAULT_BOOKING_ROWS_PER_PAGE)
   // Auto Released Pagination
   const [autoReleaseCurrentPage, setAutoReleaseCurrentPage] = useState<number>(1)
-  const [autoReleaseItemsPerPage, setAutoReleaseItemsPerPage] = useState<number>(5)
+  const [autoReleaseItemsPerPage, setAutoReleaseItemsPerPage] = useState<number>(DEFAULT_BOOKING_ROWS_PER_PAGE)
   // 🎁 Voucher / Complimentary Pagination
   const [voucherCurrentPage, setVoucherCurrentPage] = useState<number>(1)
-  const [voucherItemsPerPage, setVoucherItemsPerPage] = useState<number>(5)
+  const [voucherItemsPerPage, setVoucherItemsPerPage] = useState<number>(DEFAULT_BOOKING_ROWS_PER_PAGE)
+
+  // 💾 Rows-per-page preferences, stored per authenticated user (KTAHV)
+  const rowsPerPageUserKey = useMemo(() => {
+    const identity = user?.email || user?.name
+    return identity ? String(identity).trim().toLowerCase() : ""
+  }, [user?.email, user?.name])
+
+  // Which user key the sizes above currently reflect. Persisting is gated on this
+  // matching the live user key, so defaults can never be written over a stored
+  // preference before that user's restore has been applied.
+  const [rowsPerPageHydratedFor, setRowsPerPageHydratedFor] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (typeof window === "undefined") return
+
+    // No stable user key yet — stay on defaults and persist nothing.
+    if (!rowsPerPageUserKey) {
+      setRowsPerPageHydratedFor(null)
+      return
+    }
+
+    // Start from defaults so one user's sizes never bleed into another's session.
+    const prefs = defaultRowsPerPagePrefs()
+
+    try {
+      const raw = window.localStorage.getItem(`${KTAHV_ROWS_PER_PAGE_STORAGE_PREFIX}:${rowsPerPageUserKey}`)
+      if (raw) {
+        const parsed = JSON.parse(raw)
+        if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+          ROWS_PER_PAGE_TABLES.forEach((table) => {
+            const stored = (parsed as Record<string, unknown>)[table]
+            if (isAllowedRowsPerPage(stored)) prefs[table] = Number(stored)
+          })
+        }
+      }
+    } catch {
+      // Malformed JSON or unavailable storage — keep the defaults.
+    }
+
+    setItemsPerPage(prefs.pending)
+    setCompletedItemsPerPage(prefs.completed)
+    setCancelledItemsPerPage(prefs.cancelled)
+    setUnderAutoItemsPerPage(prefs.underAutoRelease)
+    setAutoReleaseItemsPerPage(prefs.autoReleased)
+    setVoucherItemsPerPage(prefs.voucher)
+
+    // A size change puts its table back on page 1 — restoring is no different.
+    setCurrentPage(1)
+    setCompletedCurrentPage(1)
+    setCancelledCurrentPage(1)
+    setUnderAutoCurrentPage(1)
+    setAutoReleaseCurrentPage(1)
+    setVoucherCurrentPage(1)
+
+    setRowsPerPageHydratedFor(rowsPerPageUserKey)
+  }, [rowsPerPageUserKey])
+
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    if (!rowsPerPageUserKey) return
+    if (rowsPerPageHydratedFor !== rowsPerPageUserKey) return
+
+    try {
+      window.localStorage.setItem(
+        `${KTAHV_ROWS_PER_PAGE_STORAGE_PREFIX}:${rowsPerPageUserKey}`,
+        JSON.stringify({
+          pending: itemsPerPage,
+          completed: completedItemsPerPage,
+          cancelled: cancelledItemsPerPage,
+          underAutoRelease: underAutoItemsPerPage,
+          autoReleased: autoReleaseItemsPerPage,
+          voucher: voucherItemsPerPage,
+        })
+      )
+    } catch {
+      // Storage unavailable or full — preferences just stay session-only.
+    }
+  }, [
+    rowsPerPageUserKey,
+    rowsPerPageHydratedFor,
+    itemsPerPage,
+    completedItemsPerPage,
+    cancelledItemsPerPage,
+    underAutoItemsPerPage,
+    autoReleaseItemsPerPage,
+    voucherItemsPerPage,
+  ])
 
   // 🔥 ACTIVE BOOKINGS TABS (Pending Work / Work Done)
   const [activeBookingsTab, setActiveBookingsTab] = useState<"pending" | "completed">("pending")
@@ -2029,10 +2136,6 @@ export default function SalesAccountsTeamPage() {
   const todayCheckOutStats = useMemo(() => computeStayStats(todayCheckOuts), [todayCheckOuts]);
   const inHouseStats = useMemo(() => computeStayStats(inHouseNow), [inHouseNow]);
 
-  console.log(filteredBookings)
-
-
-
   // -----------------------------------------------
   // REFERRAL COUNT (UNCHANGED, JUST MORE ACCURATE)
   // -----------------------------------------------
@@ -2148,7 +2251,8 @@ export default function SalesAccountsTeamPage() {
       const s = stage[key.toString()];
       // if (!s?.planned || s.planned.trim() === "") break; // sequential — stop at first gap
 
-      if (s?.planned || s.planned.trim() !== "") {
+      const planned = s?.planned;
+      if (typeof planned === "string" ? planned.trim() !== "" : !!planned) {
         hasActivated = true;
 
         if (!s.actual || s.actual.trim() == "") return "pending";
@@ -2165,7 +2269,8 @@ export default function SalesAccountsTeamPage() {
     let hasCancelled = false;
     for (const key in stage) {
       const s = stage[key];
-      if (s?.planned || s.planned.trim() !== "") {
+      const planned = s?.planned;
+      if (typeof planned === "string" ? planned.trim() !== "" : !!planned) {
         hasActivated = true;
         if (!s.actual || s.actual.trim() === "") return "pending";
         if (s.status?.toLowerCase().includes("cancelled") && booking.isAutoReleased !== "Auto Released") hasCancelled = true;
@@ -2181,7 +2286,8 @@ export default function SalesAccountsTeamPage() {
     let hasCancelled = false;
     for (const key in stage) {
       const s = stage[key];
-      if (s?.planned || s.planned.trim() !== "") {
+      const planned = s?.planned;
+      if (typeof planned === "string" ? planned.trim() !== "" : !!planned) {
         hasActivated = true;
         if (!s.actual || s.actual.trim() === "") return "pending";
         if (s.status?.toLowerCase().includes("cancelled") && booking.isAutoReleased !== "Auto Released") hasCancelled = true;
@@ -2216,7 +2322,6 @@ export default function SalesAccountsTeamPage() {
     if (states.includes("pending")) return "pending";
     return "completed";
   };
-  // console.log("User Work Type:", userWorkType);
 
   // 🔴 Helper: Get cancel reason & remarks — checks who cancelled first (Sales → Accounts → FO/PMS → Checkout)
   const getCancelledInfo = (booking: Booking): { doer: string; reason: string; remarks: string } => {
@@ -2341,7 +2446,6 @@ export default function SalesAccountsTeamPage() {
 
   //     if (hasRole("fo_manager")) {
   //       // if(booking.bookingId == "KTAHV-PMS-4761"){
-  //       // console.log("Checking FO Manager Stage for Booking:", booking);
   //       // }
 
   //       var stage = booking?.checkOutPersonStage?.["1"]
@@ -2412,9 +2516,7 @@ export default function SalesAccountsTeamPage() {
     });
   }, [filteredBookings, userWorkType]);
 
-  // console.log("Active Bookings Count:", activeBookings.length,activeBookings);
 
-  // console.log("Active Bookings Count:", activeBookings.length);
   // 🔥 SPLIT ACTIVE BOOKINGS INTO PENDING WORK AND COMPLETED WORK (ROLE-BASED)
   // const pendingWorkBookings = useMemo(() => {
   //   return activeBookings.filter((booking) => {
@@ -2504,7 +2606,6 @@ export default function SalesAccountsTeamPage() {
   //   });
   // }, [activeBookings, getUserWorkType()]);
 
-  // console.log("Pending Work Bookings Count:", pendingWorkBookings.length);
 
   // const completedWorkBookings = activeBookings.filter((booking) => {
   //   // Sales Agent: Check sales verification is completed
@@ -2875,7 +2976,6 @@ export default function SalesAccountsTeamPage() {
   const pendingWorkBookings = useMemo(() => {
     return activeBookings.filter((booking) => {
       const state = getBookingStateForUser(booking);
-      // console.log("Booking ID:", booking, "State for User:", state);
       if (state !== "not_applicable") return state === "pending";
 
       // Admin default (original logic)
@@ -3004,7 +3104,6 @@ export default function SalesAccountsTeamPage() {
   //     // const salesStage1 = booking.salesTeamStatus;
   //     // return salesStage1.toLowerCase().indexOf("cancelled") !== -1;
   //     var stage = booking.salesPersonStage as any;
-  //     // console.log("Sales Stage Data:", stage, "for Booking ID:", booking.bookingId);
   //     for (var key in stage) {
   //       if (stage[key]?.actual?.trim() !== "" && stage[key]?.status?.toLowerCase().indexOf("cancelled") !== -1 && booking?.isAutoReleased !== "Auto Released") {
   //         return true;
@@ -3017,7 +3116,6 @@ export default function SalesAccountsTeamPage() {
 
   //   if (hasRole("account_manager")) {
   //     // const accountsStage1 = booking.accountsVerifyStatus;
-  //     // console.log("Accounts Stage 1 Status:", accountsStage1, "for Booking ID:", booking.bookingId);
   //     // return accountsStage1.toLowerCase().indexOf("cancelled") !== -1;
   //     // var stage = booking?.accountsPersonStage["1"] as any;
   //     // return stage?.status?.toLowerCase().indexOf("cancelled") != -1 && booking?.isAutoReleased !== "Auto Released" && stage?.actual?.trim() !== "";
@@ -3557,7 +3655,6 @@ export default function SalesAccountsTeamPage() {
     );
   })
 
-  // console.log("Under Auto Release Bookings Count:", underAutoReleaseBookings.length);
   // Under Auto Release Pagination (computed after underAutoReleaseBookings is defined)
   const underAutoTotalPages = Math.max(
     1,
@@ -3586,7 +3683,6 @@ export default function SalesAccountsTeamPage() {
   const cancelledTotalPages = Math.max(1, Math.ceil(cancelledBookings.length / cancelledItemsPerPage))
   const cancelledStartIndex = (cancelledCurrentPage - 1) * cancelledItemsPerPage
   const displayedCancelledBookings = cancelledBookings.slice(cancelledStartIndex, cancelledStartIndex + cancelledItemsPerPage)
-  // console.log("Cancelled Bookings Count:", cancelledBookings.length);
 
   // Pagination for auto released bookings
   const autoReleaseTotalPages = Math.max(1, Math.ceil(autoReleaseBookings.length / autoReleaseItemsPerPage))
@@ -3747,7 +3843,6 @@ export default function SalesAccountsTeamPage() {
   }, [debouncedSearchTerm, statusFilter, teamFilter, checkInFilter, checkOutFilter, assignedFilter, sourceFilter, filteredBookings.length])
 
   const handleAction = (action: string, bookingId: string, booking) => {
-    // console.log("[v0] Action clicked:", action, "for booking:", bookingId)
 
     // Close all modals first to prevent conflicts
     setShowCancelModal(false)
@@ -3781,7 +3876,6 @@ export default function SalesAccountsTeamPage() {
           }
           break
         case "cancel":
-          // console.log("[v0] Opening cancel modal for:", bookingId)
           const currentBooking = bookings.find((b) => b.id === bookingId)
 
           // setSelectedBookingId(bookingId)
@@ -3791,7 +3885,6 @@ export default function SalesAccountsTeamPage() {
           setShowCancelModal(true)
           break
           case "payment_upload":
-            // console.log("[v0] Opening payment modal for:", bookingId)
             const paymentBooking = bookings.find((b) => b.id === bookingId)
             if (paymentBooking) {
               setSelectedBookingForPayment(paymentBooking)
@@ -3811,7 +3904,6 @@ export default function SalesAccountsTeamPage() {
           }
           break
         case "approval_upload":
-          // console.log("[v0] Opening approval modal for:", bookingId)
           const bookingForApproval = bookings.find((b) => b.id === bookingId)
           if (bookingForApproval) {
             setSelectedBookingForApproval(bookingForApproval)
@@ -3819,7 +3911,6 @@ export default function SalesAccountsTeamPage() {
           }
           break
         case "verify_accounts":
-          // console.log("[v0] Opening accounts verify modal for:", bookingId)
           const accountsBooking = bookings.find((b) => b.id === bookingId)
           let collectionHistoryArr = accountsBooking?.paymentCollectionHistory || [];
 
@@ -3837,7 +3928,6 @@ export default function SalesAccountsTeamPage() {
           if (!Array.isArray(collectionHistoryArr)) {
             collectionHistoryArr = [];
           }
-          console.log("Collection History Array:", collectionHistoryArr);
           const lastCollection = collectionHistoryArr?.length
             ? (() => {
               const latest = collectionHistoryArr.at(-1);
@@ -3867,11 +3957,9 @@ export default function SalesAccountsTeamPage() {
               };
             })()
             : null;
-          console.log("Last Collection:", lastCollection);
           if (accountsBooking) {
             setSelectedBookingForAccounts(accountsBooking)
             setcollectionTillNowArr(lastCollection)
-            // console.log("Last Collections :", lastCollection);
             // Initialize data from backend API
             const initializedData = initializeAccountsVerifyDataFromAPI(accountsBooking);
 
@@ -3881,13 +3969,11 @@ export default function SalesAccountsTeamPage() {
           }
           break
         case "verify_fo":
-          // console.log("[v0] Opening FO PMS verify modal for:", bookingId)
           const foPMSBooking = bookings.find((b) => b.id === bookingId)
           if (foPMSBooking) {
             setSelectedBookingForFOPMS(foPMSBooking)
             const initializedData = initializeAccountsVerifyDataFromAPI(foPMSBooking);
             setAccountsVerifyData(initializedData);
-            // console.log("FO PMS Booking Data:", isAccountsPending, foPMSBooking);
 
             // Initialize FO data from booking if available
             const foStages = foPMSBooking.foPersonStage || {};
@@ -3944,7 +4030,6 @@ export default function SalesAccountsTeamPage() {
           }
           break
         case "verify_checkout":
-          // console.log("[v0] Opening checkout verify modal for:", bookingId)
           const checkoutBooking = bookings.find((b) => b.id === bookingId)
           if (checkoutBooking) {
             setSelectedBookingForCheckout(checkoutBooking)
@@ -3980,9 +4065,9 @@ export default function SalesAccountsTeamPage() {
 
     setIsSubmitting(true);
     try {
-      const submitUrl = "https://script.google.com/macros/s/AKfycbwpbLZ2qiWthyEBKoTovx40lgclcqe8FdwoaurGdWJJ3MJ0F7KjnrJdO0wGJVkw_tOm/exec";
+      const submitUrl = "/api/ktahv-bookings/actions/cancellation";
 
-      const response = await fetch(submitUrl + "?action=cancelBooking", {
+      const response = await fetch(submitUrl, {
         method: "POST",
         body: JSON.stringify({
           bookingId: selectedBookingForCancelledBookings?.bookingId,
@@ -4174,23 +4259,7 @@ export default function SalesAccountsTeamPage() {
           }
         }
 
-        const submitUrl =
-          "https://script.google.com/macros/s/AKfycbwpbLZ2qiWthyEBKoTovx40lgclcqe8FdwoaurGdWJJ3MJ0F7KjnrJdO0wGJVkw_tOm/exec?action=paymentCollection"
-
-        console.log("Submitting payment for booking ID:", JSON.stringify({
-          paymentData: {
-            bookingId: selectedBookingForPayment?.bookingId,
-            amount: paymentData.amount,
-            receivedAmount: paymentData.receivedAmount,
-            currency: paymentData.currency,
-            paymentMode: paymentData.paymentMode,
-            receivedDate: paymentData.receivedDate,
-            receiptNumber: paymentData.receiptNumber,
-            screenshot: screenshotData,
-            paymentLocation: paymentData.paymentLocation,
-            paymentCollectedBy: paymentData.paymentCollectedBy,
-          },
-        }));
+        const submitUrl = "/api/ktahv-bookings/actions/payment"
 
         // 🔴 API CALL (PAYLOAD UNCHANGED)
         const response = await fetch(submitUrl, {
@@ -4214,7 +4283,6 @@ export default function SalesAccountsTeamPage() {
 
         const data = await validateResponse(response)
         await refetchBookings()
-        // console.log("Success:", data)
       },
       {
         successMessage: "Payment uploaded successfully",
@@ -4287,8 +4355,7 @@ export default function SalesAccountsTeamPage() {
           }
         }
 
-        const submitUrl =
-          "https://script.google.com/macros/s/AKfycbwpbLZ2qiWthyEBKoTovx40lgclcqe8FdwoaurGdWJJ3MJ0F7KjnrJdO0wGJVkw_tOm/exec?action=approval"
+        const submitUrl = "/api/ktahv-bookings/actions/approval"
 
         // 🔴 API CALL (PAYLOAD SAME)
         const response = await fetch(submitUrl, {
@@ -4308,7 +4375,6 @@ export default function SalesAccountsTeamPage() {
 
         const data = await validateResponse(response)
         await refetchBookings()
-        // console.log("Approval upload success:", data)
       },
       {
         successMessage: "Approval uploaded successfully",
@@ -4360,14 +4426,12 @@ export default function SalesAccountsTeamPage() {
   //   })
   //     .then((response) => response.json())
   //     .then((data) => {
-  //       console.log("Success:", data);
   //     })
   //     .catch((error) => {
   //       console.error("Error:", error);
   //     });
 
 
-  //   console.log("Accounts verification submitted:", {
   //     booking: selectedBookingForAccounts,
   //     accountsVerifyData,
   //   })
@@ -4400,8 +4464,7 @@ export default function SalesAccountsTeamPage() {
     try {
       setIsSubmitting(true)
 
-      const submitUrl =
-        "https://script.google.com/macros/s/AKfycbwpbLZ2qiWthyEBKoTovx40lgclcqe8FdwoaurGdWJJ3MJ0F7KjnrJdO0wGJVkw_tOm/exec?action=accountStatusUpdate" + accountsVerifyData.currentStage
+      const submitUrl = "/api/ktahv-bookings/actions/accounts"
 
       const response = await fetch(submitUrl, {
         method: "POST",
@@ -4442,7 +4505,6 @@ export default function SalesAccountsTeamPage() {
       })
 
       const data = await validateResponse(response)
-      // console.log(`Stage ${accountsVerifyData.currentStage} Success:`, data)
 
       // Mark current stage as completed
       const updatedAccountsVerifyData = {
@@ -4576,8 +4638,7 @@ export default function SalesAccountsTeamPage() {
     try {
       setIsSubmitting(true)
 
-      const submitUrl =
-        `https://script.google.com/macros/s/AKfycbwpbLZ2qiWthyEBKoTovx40lgclcqe8FdwoaurGdWJJ3MJ0F7KjnrJdO0wGJVkw_tOm/exec?action=foStatusUpdate${foPMSVerifyData.currentStage}`
+      const submitUrl = "/api/ktahv-bookings/actions/fo-pms"
 
       const response = await fetch(submitUrl, {
         method: "POST",
@@ -4610,7 +4671,6 @@ export default function SalesAccountsTeamPage() {
       })
 
       const data = await validateResponse(response)
-      // console.log(`Stage ${foPMSVerifyData.currentStage} Success:`, data)
       const canonicalFoStatus = String(
         data?.frontOfficeStatus ??
         data?.status ??
@@ -4641,7 +4701,6 @@ export default function SalesAccountsTeamPage() {
               actual: updatedFoPMSVerifyData[currentStageKey].submittedAt,
               planned: booking?.foPersonStage?.[foPMSVerifyData.currentStage.toString()]?.planned || ""
             }
-            // console.log("Updated FO Person Stage:", updatedFoPersonStage);
             return {
               ...booking,
               foPersonStage: updatedFoPersonStage,
@@ -4740,8 +4799,7 @@ export default function SalesAccountsTeamPage() {
     try {
       setIsSubmitting(true)
 
-      const submitUrl =
-        "https://script.google.com/macros/s/AKfycbwpbLZ2qiWthyEBKoTovx40lgclcqe8FdwoaurGdWJJ3MJ0F7KjnrJdO0wGJVkw_tOm/exec?action=checkoutStatusUpdate1"
+      const submitUrl = "/api/ktahv-bookings/actions/checkout"
 
       const response = await fetch(submitUrl, {
         method: "POST",
@@ -4754,7 +4812,6 @@ export default function SalesAccountsTeamPage() {
       })
 
       const data = await validateResponse(response)
-      // console.log("Success:", data)
       const canonicalCheckoutStatus = String(
         data?.checkoutVerificationStatus ??
         data?.status ??
@@ -5082,7 +5139,6 @@ export default function SalesAccountsTeamPage() {
     { name: "Cancelled", value: statusCounts.Cancelled },
     { name: "Auto Release", value: statusCounts.AutoRelease },
   ]
-  // console.log("Status Trend Data:", statusTrendData)
 
   const renderStatusBadge = (status: string, type: string) => {
     const getStatusColor = (status: string, type: string) => {
@@ -5347,29 +5403,6 @@ export default function SalesAccountsTeamPage() {
     );
   }
 
-  // if (loading) {
-  //   return (
-  //     <div className="fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-white/90 backdrop-blur-xl">
-
-  //       {/* Logo */}
-  //       <img
-  //         src="/grouploader.gif"
-  //         alt="Loading..."
-  //         className="h-20 w-auto animate-pulse opacity-90 drop-shadow-lg"
-  //       />
-
-  //       {/* Text */}
-  //       <p className="mt-4 text-base font-semibold text-teal-700 tracking-wide">
-  //         Fetching latest bookings...
-  //       </p>
-
-  //       {/* Modern Loader Ring */}
-  //       {/* <div className="mt-6 h-12 w-12 border-4 border-teal-500 border-t-transparent rounded-full animate-spin"></div> */}
-  //     </div>
-  //   );
-  // }
-
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-teal-50 overflow-x-hidden">
       <div className="bg-gradient-to-r from-teal-700 via-teal-600 to-violet-600 border-b border-teal-400 shadow-2xl">
@@ -5469,6 +5502,89 @@ export default function SalesAccountsTeamPage() {
 
 
       <div className="w-full px-2 sm:px-4 py-4 sm:py-8 space-y-4 sm:space-y-8">
+
+        {/* ================= LOAD / REFRESH FAILURE ================= */}
+        {error && bookings.length === 0 && (
+          <div className="rounded-xl border border-red-300 bg-red-50 shadow-md p-4 sm:p-6">
+            <div className="flex flex-col sm:flex-row sm:items-start gap-3 sm:gap-4">
+              <div className="h-10 w-10 rounded-lg bg-red-600 flex items-center justify-center shadow-sm flex-shrink-0">
+                <AlertTriangle className="h-5 w-5 text-white" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <h3 className="text-base sm:text-lg font-semibold text-red-800 leading-tight">
+                  Unable to load bookings
+                </h3>
+                <p className="text-xs sm:text-sm text-red-700 mt-1">
+                  We couldn&apos;t reach the bookings service, so no bookings could be shown. This is not an
+                  empty result — please retry.
+                </p>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => refetchBookings()}
+                className="w-full sm:w-auto bg-white border-red-300 text-red-700 font-medium hover:bg-red-100 flex-shrink-0"
+              >
+                <RefreshCw className="h-4 w-4 mr-2" />
+                Retry
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* ================= REFRESH FAILED, SHOWING RETAINED ROWS ================= */}
+        {error && bookings.length > 0 && (
+          <div className="rounded-xl border border-amber-300 bg-amber-50 shadow-md p-3 sm:p-4">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
+              <div className="flex items-start sm:items-center gap-3 min-w-0 flex-1">
+                <AlertTriangle className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5 sm:mt-0" />
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-amber-900 leading-tight">
+                    Latest refresh failed
+                  </p>
+                  <p className="text-xs text-amber-800 mt-0.5">
+                    Showing the bookings loaded earlier. They may be out of date.
+                  </p>
+                </div>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => refetchBookings()}
+                className="w-full sm:w-auto bg-white border-amber-300 text-amber-800 font-medium hover:bg-amber-100 flex-shrink-0"
+              >
+                <RefreshCw className="h-4 w-4 mr-2" />
+                Retry
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* ================= SUCCESSFUL EMPTY RESULT ================= */}
+        {!loading && !error && bookings.length === 0 && (
+          <div className="rounded-xl border border-slate-200 bg-white shadow-md p-4 sm:p-6">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
+              <div className="min-w-0 flex-1">
+                <h3 className="text-sm sm:text-base font-semibold text-slate-800 leading-tight">
+                  No bookings found
+                </h3>
+                <p className="text-xs sm:text-sm text-slate-500 mt-1">
+                  Bookings loaded successfully, but there are none visible to you right now.
+                </p>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => refetchBookings()}
+                className="w-full sm:w-auto bg-white border-slate-300 text-slate-700 font-medium hover:bg-slate-100 flex-shrink-0"
+              >
+                <RefreshCw className="h-4 w-4 mr-2" />
+                Refresh
+              </Button>
+            </div>
+          </div>
+        )}
+
         <div className="space-y-8">
           {/* ================= FILTERS & SEARCH ================= */}
           <div className="mt-2">
@@ -8045,22 +8161,11 @@ export default function SalesAccountsTeamPage() {
                     {/* Right controls */}
                     <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3 w-full sm:w-auto">
 
-                      {/* Rows per page dropdown (desktop only) */}
-                      <div className="hidden sm:flex items-center gap-2">
-                        <span className="text-sm text-slate-600">Rows</span>
-                        <Select value={String(itemsPerPage)} onValueChange={(v) => { setItemsPerPage(Number(v)); setCurrentPage(1) }}>
-                          <SelectTrigger className="h-8 w-20">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="5">5</SelectItem>
-                            <SelectItem value="10">10</SelectItem>
-                            <SelectItem value="25">25</SelectItem>
-                            <SelectItem value="50">50</SelectItem>
-                            <SelectItem value="100">100</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
+                      {/* Rows per page dropdown */}
+                      <BookingRowsPerPageSelect
+                        value={itemsPerPage}
+                        onChange={(size) => { setItemsPerPage(size); setCurrentPage(1) }}
+                      />
 
                       {/* Pagination controls */}
                       <div className="flex flex-wrap items-center justify-center sm:justify-between gap-2 sm:gap-2 w-full sm:w-auto">
@@ -8921,28 +9026,14 @@ export default function SalesAccountsTeamPage() {
                     {/* Right controls */}
                     <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3 w-full sm:w-auto">
 
-                      {/* Rows (desktop only) */}
-                      <div className="hidden sm:flex items-center gap-2">
-                        <span className="text-sm text-slate-600">Rows</span>
-                        <Select
-                          value={String(completedItemsPerPage)}
-                          onValueChange={(v) => {
-                            setCompletedItemsPerPage(Number(v))
-                            setCompletedCurrentPage(1)
-                          }}
-                        >
-                          <SelectTrigger className="h-8 w-20">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="5">5</SelectItem>
-                            <SelectItem value="10">10</SelectItem>
-                            <SelectItem value="25">25</SelectItem>
-                            <SelectItem value="50">50</SelectItem>
-                            <SelectItem value="100">100</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
+                      {/* Rows */}
+                      <BookingRowsPerPageSelect
+                        value={completedItemsPerPage}
+                        onChange={(size) => {
+                          setCompletedItemsPerPage(size)
+                          setCompletedCurrentPage(1)
+                        }}
+                      />
 
                       {/* Pagination */}
                       <div className="flex flex-wrap items-center justify-center gap-1 sm:gap-2 sm:flex-nowrap">
@@ -9481,28 +9572,14 @@ export default function SalesAccountsTeamPage() {
                     {/* Right controls */}
                     <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3 w-full sm:w-auto">
 
-                      {/* Rows (desktop only) */}
-                      <div className="hidden sm:flex items-center gap-2">
-                        <span className="text-sm text-slate-600">Rows</span>
-                        <Select
-                          value={String(cancelledItemsPerPage)}
-                          onValueChange={(v) => {
-                            setCancelledItemsPerPage(Number(v))
-                            setCancelledCurrentPage(1)
-                          }}
-                        >
-                          <SelectTrigger className="h-8 w-20">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="5">5</SelectItem>
-                            <SelectItem value="10">10</SelectItem>
-                            <SelectItem value="25">25</SelectItem>
-                            <SelectItem value="50">50</SelectItem>
-                            <SelectItem value="100">100</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
+                      {/* Rows */}
+                      <BookingRowsPerPageSelect
+                        value={cancelledItemsPerPage}
+                        onChange={(size) => {
+                          setCancelledItemsPerPage(size)
+                          setCancelledCurrentPage(1)
+                        }}
+                      />
 
                       {/* Pagination */}
                       <div className="flex flex-wrap items-center justify-center gap-1 sm:gap-2 sm:flex-nowrap">
@@ -9958,28 +10035,14 @@ export default function SalesAccountsTeamPage() {
                 {/* Right controls */}
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3 w-full sm:w-auto">
 
-                  {/* Rows (desktop only) */}
-                  <div className="hidden sm:flex items-center gap-2">
-                    <span className="text-sm text-slate-600">Rows</span>
-                    <Select
-                      value={String(autoReleaseItemsPerPage)}
-                      onValueChange={(v) => {
-                        setAutoReleaseItemsPerPage(Number(v))
-                        setAutoReleaseCurrentPage(1)
-                      }}
-                    >
-                      <SelectTrigger className="h-8 w-20">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="5">5</SelectItem>
-                        <SelectItem value="10">10</SelectItem>
-                        <SelectItem value="25">25</SelectItem>
-                        <SelectItem value="50">50</SelectItem>
-                        <SelectItem value="100">100</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
+                  {/* Rows */}
+                  <BookingRowsPerPageSelect
+                    value={autoReleaseItemsPerPage}
+                    onChange={(size) => {
+                      setAutoReleaseItemsPerPage(size)
+                      setAutoReleaseCurrentPage(1)
+                    }}
+                  />
 
                   {/* Pagination */}
                   <div className="flex flex-wrap items-center justify-center gap-1 sm:gap-2 sm:flex-nowrap">
@@ -10259,24 +10322,14 @@ export default function SalesAccountsTeamPage() {
                   {/* Right controls */}
                   <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3 w-full sm:w-auto">
 
-                    {/* Rows (desktop only) */}
-                    <div className="hidden sm:flex items-center gap-2">
-                      <span className="text-sm text-slate-600">Rows</span>
-                      <select
-                        value={voucherItemsPerPage}
-                        onChange={(e) => {
-                          setVoucherItemsPerPage(Number(e.target.value))
-                          setVoucherCurrentPage(1)
-                        }}
-                        className="h-8 w-20 rounded-md border border-slate-300 px-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                      >
-                        {[5, 10, 25, 50, 100].map((size) => (
-                          <option key={size} value={size}>
-                            {size}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
+                    {/* Rows */}
+                    <BookingRowsPerPageSelect
+                      value={voucherItemsPerPage}
+                      onChange={(size) => {
+                        setVoucherItemsPerPage(size)
+                        setVoucherCurrentPage(1)
+                      }}
+                    />
 
                     {/* Pagination */}
                     <div className="flex flex-wrap items-center justify-center gap-1 sm:gap-2 sm:flex-nowrap">
@@ -14095,7 +14148,6 @@ export default function SalesAccountsTeamPage() {
                   setSelectedBookingForArrival(null)
                 }}
                 onSubmit={(data: any) => {
-                  console.log("Arrival flight details submitted for", selectedBookingForArrival?.bookingId, data)
                   showFormSubmitSuccess(data?.responseMessage || "Arrival flight details saved")
                   setShowArrivalTicketModal(false)
                   setSelectedBookingForArrival(null)
@@ -14119,7 +14171,6 @@ export default function SalesAccountsTeamPage() {
                   setSelectedBookingForDeparture(null)
                 }}
                 onSubmit={(data: any) => {
-                  console.log("Departure flight details submitted for", selectedBookingForDeparture?.bookingId, data)
                   showFormSubmitSuccess(data?.responseMessage || "Departure flight details saved")
                   setShowDepartureTicketModal(false)
                   setSelectedBookingForDeparture(null)

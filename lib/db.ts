@@ -16,6 +16,8 @@ const DB_CONFIG = {
   connectionLimit: 10,
   connectTimeout: 30000,
 }
+
+
 declare global {
   var _sqlPool: mysql.Pool | undefined
 }

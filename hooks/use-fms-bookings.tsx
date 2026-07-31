@@ -261,24 +261,55 @@ export function useBookings() {
     async function fetchData() {
       try {
         setLoading(true);
+        setError(null);
 
         const SCRIPT_URL = "/api/ktahv-bookings";
-        const MAX_RETRIES = 5;
-        let res: Response | null = null;
+        const MAX_RETRIES = 2;
+        const ATTEMPT_TIMEOUT_MS = 20000;
+        let json: any = null;
+        let succeeded = false;
 
         for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
-          if (!isMounted) return;
-          try {
-            res = await fetch(SCRIPT_URL, {
-              cache: "no-store",
-              signal: abortController.signal
-            });
-            if (res.ok) break;
-          } catch (fetchErr) {
-            if (!isMounted || (fetchErr as any).name === "AbortError") {
-              return;
+          if (!isMounted || abortController.signal.aborted) return;
+
+          // Per-attempt controller: a timeout aborts only this attempt, while a
+          // lifecycle abort is forwarded so unmount still cancels everything.
+          const attemptController = new AbortController();
+          const forwardAbort = () => attemptController.abort();
+          abortController.signal.addEventListener("abort", forwardAbort);
+          const releaseAbortListener = () =>
+            abortController.signal.removeEventListener("abort", forwardAbort);
+
+          let attemptTimeoutId: NodeJS.Timeout | null = setTimeout(() => {
+            attemptTimeoutId = null;
+            attemptController.abort();
+          }, ATTEMPT_TIMEOUT_MS);
+          const clearAttemptTimeout = () => {
+            if (attemptTimeoutId) {
+              clearTimeout(attemptTimeoutId);
+              attemptTimeoutId = null;
             }
-            console.warn(`Fetch attempt ${attempt} failed:`, fetchErr);
+          };
+
+          try {
+            const res = await fetch(SCRIPT_URL, {
+              cache: "no-store",
+              signal: attemptController.signal
+            });
+            if (res.ok) {
+              // The attempt timeout stays armed across the body read, so a hung
+              // response body fails this attempt too — and, like a failed fetch,
+              // is retried by this same loop instead of escaping to the caller.
+              json = await res.json();
+              succeeded = true;
+              break;
+            }
+          } catch (attemptErr) {
+            if (!isMounted || abortController.signal.aborted) return;
+            console.warn(`Fetch attempt ${attempt} failed:`, attemptErr);
+          } finally {
+            clearAttemptTimeout();
+            releaseAbortListener();
           }
 
           if (attempt < MAX_RETRIES) {
@@ -295,12 +326,9 @@ export function useBookings() {
 
         if (!isMounted) return;
 
-        if (!res || !res.ok) {
+        if (!succeeded) {
           throw new Error(`Failed to fetch bookings after ${MAX_RETRIES} attempts`);
         }
-
-        const json = await res.json();
-        if (!isMounted) return;
 
         const data = json?.bookings || [];
         setNameAliases(json?.nameAliases || {});
@@ -500,8 +528,8 @@ export function useBookings() {
                 }
                 : undefined,
             };
-          } catch (e) {
-            console.error("Failed to map booking item:", item, e);
+          } catch {
+            console.error("Failed to map booking item");
             return null;
           }
         }).filter((item: any) => item !== null);
@@ -520,6 +548,7 @@ export function useBookings() {
         if (isMounted) {
           setPendingCount(formattedPending);
           setBookings(formatted);
+          setError(null);
         }
       } catch (err) {
         console.error(err);

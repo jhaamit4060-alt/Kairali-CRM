@@ -540,7 +540,6 @@ export default function PartnersPage() {
             const j = await res.json()
             if (j.status === "success") setRejectedPartners(j.data)
         } catch {
-            console.log("Rejected fetch error")
         } finally {
             setLoadingRejected(false)
         }

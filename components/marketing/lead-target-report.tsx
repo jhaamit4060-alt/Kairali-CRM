@@ -3,7 +3,7 @@
 import { useState, useMemo } from "react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { BarChart3, TableIcon } from "lucide-react"
+import { AlertTriangle, BarChart3, TableIcon } from "lucide-react"
 import {
   Bar,
   BarChart,
@@ -66,7 +66,7 @@ export function LeadTargetReport({
   })
 
   // Combine data based on selected companies
-  const { dailyReport, totals, loading } = useMemo(() => {
+  const { dailyReport, totals, loading, error } = useMemo(() => {
     const allData = []
     let isLoading = false
 
@@ -82,6 +82,10 @@ export function LeadTargetReport({
       allData.push(villaRaagData)
       isLoading = isLoading || villaRaagData.loading
     }
+
+    // Surface the first load failure among the selected companies so a service
+    // error is not shown as a valid empty result.
+    const loadError = allData.find((d) => d.error)?.error ?? null
 
     // Merge daily reports by date
     const dateMap = new Map<string, DailyLeadTargetRow>()
@@ -126,6 +130,7 @@ export function LeadTargetReport({
       dailyReport: mergedDailyReport,
       totals: mergedTotals,
       loading: isLoading,
+      error: loadError,
     }
   }, [companies, ktahvData, kapplData, villaRaagData])
 
@@ -152,6 +157,26 @@ export function LeadTargetReport({
       <section className="w-full mt-6 sm:mt-8 mb-10">
         <div className="rounded-xl border-2 border-slate-300 bg-white shadow-sm p-10 text-center text-slate-500">
           Loading Lead Target Report…
+        </div>
+      </section>
+    )
+  }
+
+  /* ================= LOAD ERROR ================= */
+
+  if (error) {
+    return (
+      <section className="w-full mt-6 sm:mt-8 mb-10">
+        <div className="rounded-xl border-2 border-red-300 bg-red-50 shadow-sm p-10 text-center">
+          <AlertTriangle className="h-6 w-6 text-red-600 mx-auto mb-3" />
+          <p className="text-red-700 font-medium">
+            Couldn&apos;t load the Lead Target Report
+          </p>
+          <p className="text-xs text-red-600 mt-2">
+            The report service is unavailable, so no figures are shown. This is
+            not an empty result — please refresh the page to try again.
+          </p>
+          <p className="text-[11px] text-red-500 mt-2">{error}</p>
         </div>
       </section>
     )

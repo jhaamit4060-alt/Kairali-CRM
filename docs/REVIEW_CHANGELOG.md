@@ -1,0 +1,83 @@
+# Kairali CRM Review Changelog
+
+## Manager authority boundaries
+
+- The manager may independently sequence work inside an approved priority tier and will state the rationale.
+- The manager may approve routine styling, prop, state-logic, and obvious null/undefined fixes that do not alter integrations or data flow.
+- The manager may approve minor file-scope expansion when required for a clean routine fix, such as editing the correct shared utility.
+- Explicit user approval is required before changes to authentication/session behavior, Zoom OAuth, payments or reconciliation data, Google Drive/Sheets or Apps Script integrations, schemas or persisted data shapes, file deletion/significant restructuring, or behavior that may plausibly be intentional.
+- When a decision genuinely falls between those categories, work stops for explicit approval.
+- Claude Code performs application edits one self-contained task at a time in manual permission mode. The manager reviews every diff and does not commit or push until the user requests it.
+
+## 2026-07-30 — Phase 0 discovery
+
+- Confirmed the requested two-phase workflow and the requirement for confirmation before module edits.
+- Scoped work to `/Users/kritikakairali/Downloads/KairaliCRM_workbook`; noted that the Git root is the parent Downloads directory.
+- Inventoried 61 user-facing page routes, 101 API route files, shared layouts/loading states, 132 component files, 34 hooks, 2 contexts, 17 libraries, 9 type files, utilities, data, public assets, and scratch/temporary artifacts.
+- Traced route-to-hook, route-to-API, API-to-SQL, external URL, and environment-variable dependencies.
+- Documented KTAHV booking, CRR, new-order, partner onboarding, doctor consultation, voice qualification, deal assistant, complaint, and meeting pipeline state behavior and skip/terminal cases.
+- Documented MySQL, Google Apps Script/Sheets, Google OAuth/Calendar/Meet/Drive, Zoom, OpenAI, Gemini, ffmpeg, IVR/audio, and WhatsApp wiring.
+- Recorded mock-backed modules, duplicate/legacy modules, access-control gaps, hard-coded configuration, serverless-storage concerns, and complexity hotspots.
+- Ran a non-emitting TypeScript check successfully.
+- Created `docs/PHASE_0_DISCOVERY.md`.
+- No application behavior, source module, dependency, configuration, database, or external system was changed.
+
+## 2026-07-30 — Audit workpack reconciliation
+
+- Read the supplied audit workpack in full and treated Section 0 as binding for future implementation.
+- Reconciled the workpack with the current snapshot: 61 page routes, 101 `/api` routes plus one root handler, 226 fetch sites, and 53 checked-in GAS IDs.
+- Installed dependencies from the existing lockfile; `package.json` and `package-lock.json` hashes remained unchanged.
+- Established the actual TypeScript baseline at 595 errors across 78 files and added `ts-error-baseline.txt`.
+- Verified `npm run build` succeeds with network access; recorded the pipeline route-config warning and type-check bypass.
+- Corrected the Phase 0 report’s earlier invalid TypeScript-check statement.
+- Cross-referenced all Phase 1–7 and owner-level findings in `docs/AUDIT_WORKPACK_CROSS_REFERENCE.md`.
+- Identified Phase 2.3 payment false-success as already fixed in this snapshot and several old nullability sites as stale/resolved.
+- Documented the proposed Phase 1 behavior, complete anticipated file scope, behavior changes, manual dependencies, and unresolved decisions.
+- Did not change application source or create a branch because the current app directory is not a standalone Git checkout.
+
+## Waiting
+
+- User confirmation of the Phase 1 understanding/file plan.
+- Correct Git repository checkout or instruction identifying the intended worktree.
+- Answers/owner decisions for the seven Phase 1 ambiguities in the cross-reference.
+
+## 2026-07-30 — KTAHV Booking FMS implementation
+
+- Attached the verified `jhaamit4060-alt/Kairali-CRM.git` history to the local project and created local branch `fix/phase2-ktahv-booking-fms`; no commit or push was made.
+- KTAHV Booking FMS — sparse Accounts/FO/Checkout stage records could crash role-state filtering — Claude CLI replaced the three unsafe planned-stage predicates with null-safe, whitespace-aware checks — diff reviewed, `git diff --check` passed, no diagnostics point to the changed lines, and the combined production build now succeeds.
+- KTAHV Booking FMS — booking reads could retry five times and hang indefinitely per attempt — Claude CLI added two total attempts with independent 20-second aborts and stale-error clearing — diff reviewed, no hook diagnostics, project diagnostic count held at 601 in the current generated-type state, and the production build succeeded.
+- KTAHV Booking FMS — failed reads looked empty and successful empty refetches could retain stale rows — Claude CLI added distinct initial-failure, stale-refresh, and successful-empty states with Retry/Refresh actions, applied valid empty arrays, and removed the unused 700ms loader state — diff reviewed, diagnostic count held at 601, and production build succeeded; screenshot evidence remains pending because the in-app browser cannot reach the host-local development server.
+- KTAHV Booking FMS — six booking tables defaulted to five rows and forgot user choices — Claude CLI changed all defaults to 25, added guarded per-user persistence, and extracted the five existing selectors into one mobile-visible component — hydration/user-switch behavior reviewed, diagnostic count held at 601, and production build succeeded; visual evidence remains pending for the same browser-connectivity limitation.
+- KTAHV Booking FMS — the MySQL aggregation endpoint exposed sensitive booking data without authentication — Claude CLI added signed-session validation before pool access — missing and tampered cookie checks return the expected 401 JSON, diagnostic count held at 601, and production build succeeded; valid-session data smoke test remains pending.
+- KTAHV Booking FMS payment collection — the browser wrote payment/evidence data directly to the public Apps Script endpoint and logged the encoded evidence payload — Claude CLI replaced only this action with a signed-session same-origin proxy, a fixed server-controlled `paymentCollection` upstream action, server-only `GAS_SHARED_SECRET`, a full-response 20-second timeout, transparent upstream response relay, and no payload logging — manager-requested corrections were re-reviewed, missing/tampered sessions return the expected 401 JSON, `git diff --check` passes, and the production build succeeds; authenticated forwarding remains pending until the secret is provisioned in Vercel/local runtime and validated in the Apps Script handler.
+- KTAHV Booking FMS approval upload — the browser wrote approval metadata and encoded screenshot evidence directly to the public Apps Script endpoint — Claude CLI replaced only this action with `/api/ktahv-bookings/actions/approval`, preserving the exact top-level payload and workflow while the new signed-session proxy fixes the upstream action, overrides the server-only shared secret, applies a full-response 20-second timeout, and relays the GAS response — diff reviewed against the payment proxy, missing/tampered sessions return the expected 401 JSON, `git diff --check` passes, and the production build includes both action routes; authenticated forwarding has the same secret/Apps Script rollout dependency.
+- KTAHV Booking FMS cancellation — the browser wrote cancellation reason and remarks directly to the public Apps Script endpoint — Claude CLI replaced only this action with `/api/ktahv-bookings/actions/cancellation`, preserving the exact payload and existing optimistic stage-cancellation/refetch workflow while the signed-session proxy fixes `action=cancelBooking`, overrides the server-only shared secret, applies a full-response 20-second timeout, and relays the GAS response — diff reviewed against the approved proxy pattern, missing/tampered sessions return the expected 401 JSON, `git diff --check` passes, and the production build includes the cancellation route; authenticated forwarding has the same secret/Apps Script rollout dependency.
+- KTAHV Booking FMS Accounts verification — the browser selected and called `accountStatusUpdate1/2/3` directly with financial reconciliation data — Claude CLI changed only the active handler transport to `/api/ktahv-bookings/actions/accounts` and added a signed-session proxy that permits integer stages 1–3, requires the embedded stage number to match, maps each stage to a fixed upstream action, preserves the complete stage/cumulative payload and response semantics, overrides the shared secret, and applies the full-response timeout — diff reviewed, missing/tampered sessions return the expected 401 JSON, `git diff --check` passes, and the production build includes the Accounts route; valid stage-boundary and authenticated forwarding checks remain part of the secret-backed rollout verification.
+- KTAHV Booking FMS FO/PMS verification — the browser selected and called `foStatusUpdate1/2` directly with operational verification data — Claude CLI changed only the active handler transport to `/api/ktahv-bookings/actions/fo-pms` and added a signed-session proxy that permits integer stages 1–2, requires the embedded stage number to match, maps each stage to a fixed upstream action, preserves the stage/cumulative payload, activated-stage skipping, optimistic status updates, final refetch, and response semantics, overrides the shared secret, and applies the full-response timeout — diff reviewed, missing/tampered sessions return the expected 401 JSON, `git diff --check` passes, and the production build includes the FO/PMS route; authenticated forwarding remains part of the secret-backed rollout verification.
+- KTAHV Booking FMS Checkout verification — the browser sent checkout and payment-settlement data directly to fixed GAS action `checkoutStatusUpdate1` — Claude CLI changed only the active handler transport to `/api/ktahv-bookings/actions/checkout` and added a signed-session, fixed-action proxy that preserves the exact payload, validation, optimistic checkout/payment/stage update, refetch, modal reset, and response semantics while overriding the shared secret and applying the full-response timeout — diff reviewed, missing/tampered sessions return the expected 401 JSON, `git diff --check` passes, and the production build includes the Checkout route; authenticated forwarding remains part of the secret-backed rollout verification.
+- KTAHV individual booking profile — nine legacy SQL column names did not match the normalized keys consumed by the form row mapper, leaving data-source and guest 2/3 fields blank during edit/prefill — Claude CLI added only the nine required SELECT aliases in `formdataktahv`; the physical columns were confirmed in the captured schema, every alias was matched to its mapper read, `git diff --check` passed, and the production build succeeded.
+- KTAHV Booking FMS read reliability — the per-attempt booking-read timeout originally covered only response headers, so a hung JSON body could still stall the bookings page — Claude CLI moved JSON parsing inside the two-attempt loop so each 20-second attempt covers headers plus body read and retries once on timeout/fetch failure — manager-requested correction reviewed, `git diff --check` passed, and the production build succeeded with only the known warnings.
+- Preserved existing local `lib/db.ts`, discovery documents, and TypeScript baseline changes as pre-existing work.
+
+## Current KTAHV verification and rollout status
+
+- No application changes have been committed, staged, or pushed.
+- All six new write proxies reject missing and tampered sessions with 401 responses.
+- Authenticated Apps Script forwarding is still pending because `GAS_SHARED_SECRET` must be provisioned in the local/Vercel runtime and enforced by the deployed Apps Script handler.
+- Valid-session KTAHV database smoke testing and browser screenshot evidence for the loading, error, empty, retry, and pagination states remain pending.
+- The production build succeeds. Existing repository warnings remain: deprecated middleware convention, stale `baseline-browser-mapping` data, and ignored `app/api/pipeline/route.ts` route config; the build also skips TypeScript validation by project configuration.
+- Final scan found no active direct Apps Script write in the KTAHV team-page handlers. Separate KTAHV-adjacent code still contains a direct booking-form submission endpoint in `components/Booking Form/BookingFormBase.tsx` and a direct booking-detail Apps Script endpoint in `components/Bookingdetailpopup.tsx`; these were outside the approved handler scope and were not changed.
+
+## 2026-07-30 — Phase 2 crash prevention
+
+- Error recovery — the app previously had no custom root, global, not-found, FMS, Leads, Meetings, or Accounts Tracker error surfaces — Claude CLI added the seven narrowly scoped Next.js boundary files with friendly recovery actions and temporary pre-Sentry logging — every manual edit was individually reviewed, `git diff --check` passed, the production build succeeded, and the custom 404 was visually verified at desktop and 390×844 mobile widths.
+- Leads remarks — both live Leads pages dereferenced optional `remarks` arrays directly — Claude CLI added empty-array fallbacks to the count and render loop in only `app/leads/page.tsx` and `app/leads/duplicates/page.tsx` — the four-expression diff was reviewed, no unsafe direct reads remain at those sites, and `git diff --check` passes.
+- Meetings popups — legacy or malformed meeting records could leave popup arrays or participant names empty, causing `.map`, `.length`, or avatar-index failures — Claude CLI added empty-array fallbacks to the four popup paths and safe “?” avatar initials at both participant renderers — all 11 expression changes were reviewed in the requested JSX region, no cited unsafe reads remain, and `git diff --check` passes.
+- Lead target report cache — failed or non-OK lead-target fetches could poison the module-level `cachedPromise` forever — Claude CLI added `res.ok` validation before JSON parsing and clears the cached promise on rejection so future hook mounts can retry while preserving the hook API and current error behavior — diff reviewed, `git diff --check` passed, and the production build succeeded; plain `npx tsc --noEmit --pretty false` hit Node heap OOM before diagnostics.
+- Lead target report silent failure — lead-target service failures were rendered as the normal “No data for the selected filters” empty state — Claude CLI added an additive hook `error` field and a distinct report load-failure panel for selected-company fetch errors while preserving the real empty-filter state, table/chart behavior, endpoint, and transformations — diff reviewed, `git diff --check` passed, and the production build succeeded with only known warnings.
+- Enquiry reverification load failure — GET failures on `/fms/enquiry-reverification` were only logged, leaving stale/empty KPIs and table rows with no user-visible failure — Claude CLI added a read-only load-error state, `res.ok`/`json.success` validation, a compact Retry banner, and an empty-table error row while preserving query construction, filters, pagination, columns, API route, and both POST/save flows — diff reviewed, `git diff --check` passed, and the production build succeeded with only known warnings.
+- Calls report load failure — `/calls/reports` already received an error/refetch pair from `useCallsData`, but API failures fell through to the normal “No data found” state — Claude CLI added a distinct load-failure panel and retry-aware empty state while preserving the hook, Apps Script URL, filters, metrics, table/graph behavior, and loader timing — diff reviewed, `git diff --check` passed, and the production build succeeded with only known warnings.
+
+## 2026-07-30 — Browser console privacy cleanup
+
+- Browser console data exposure — active client-side debug logging exposed booking, lead, payment, form, meeting, call-history, complaint, partner, and report data through the browser console — manager directly removed active browser-side `console.log`/`console.info`/`console.debug`/`console.table`/console-group calls from client pages, components, hooks, and contexts, replaced log-only demo callbacks with no-op callbacks, removed JSX debug fragments, and sanitized the highest-risk browser `console.error`/`console.warn` calls that printed raw API bodies or records — scan now finds no active browser-side debug log calls outside `app/api/**`, `git diff --check` passed, and the production build succeeded with only known warnings.

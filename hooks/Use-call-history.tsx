@@ -177,21 +177,14 @@ export function useCallHistory(leadId: string | number | null | undefined) {
             try {
                 const url = `${API_URL}?id=${leadId}`
 
-                console.log('🔍 Fetching call history for leadId:', leadId)
-                console.log('🌐 API URL:', url)
-
                 const response = await fetch(url)
-                console.log('📡 Response status:', response.status)
-                console.log('📡 Response ok:', response.ok)
 
                 if (!response.ok) {
-                    const errorText = await response.text()
-                    console.error('❌ API Error Response:', errorText)
-                    throw new Error(`API error: ${response.status} - ${errorText}`)
+                    await response.text()
+                    throw new Error(`API error: ${response.status}`)
                 }
 
                 const data = await response.json()
-                console.log('✅ Received data:', data)
 
                 // Check if API returned an error
                 if (data.error) {
@@ -206,7 +199,6 @@ export function useCallHistory(leadId: string | number | null | undefined) {
                         transformedData.push(transformArr)
                     }
                 }
-                console.log('✅ Transformed data:', transformedData)
 
                 setFollowUps(transformedData)
             } catch (err) {

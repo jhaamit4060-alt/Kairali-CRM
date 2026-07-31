@@ -47,7 +47,6 @@ export function ComplaintActionModal({ isOpen, onClose, title, type, complaint }
   }
 
   const handleSubmit = () => {
-    console.log(`${type} action:`, actionData)
     // Handle the action submission
     onClose()
   }

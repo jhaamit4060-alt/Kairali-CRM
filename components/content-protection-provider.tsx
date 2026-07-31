@@ -44,20 +44,16 @@ export default function ContentProtectionProvider({ children }: ContentProtectio
           showAlert: false,
         }
       : {
-          // 🔒 Full protection for other users
-          disableRightClick: true,
-          disableCopy: true,
-          disableCut: true,
+          // 🔓 Normal browser behavior for other users
+          disableRightClick: false,
+          disableCopy: false,
+          disableCut: false,
           enablePaste: true,
-          disableTextSelection: true,
+          disableTextSelection: false,
           disableDevTools: false,
           disablePrint: false,
           showAlert: false,
-          onAttempt: (action) => {
-            if (process.env.NODE_ENV === 'development') {
-              console.log(`🛡️ Protection triggered: ${action} (Role: ${userRole})`);
-            }
-          },
+          onAttempt: () => {},
         }
   );
 

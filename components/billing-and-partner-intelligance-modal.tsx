@@ -1320,7 +1320,7 @@ export function Part3Button({ partnerName, partnerId }: { partnerName?: string; 
         <BookOpen size={14} /> Open Part 3
       </button>
       <Part3Modal isOpen={open} onClose={() => setOpen(false)}
-        onSubmit={async (d) => console.log('Part 3:', d)} partnerName={partnerName} partnerId={partnerId} />
+        onSubmit={async () => {}} partnerName={partnerName} partnerId={partnerId} />
     </>
   );
 }

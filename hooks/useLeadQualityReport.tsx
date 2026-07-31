@@ -85,7 +85,6 @@ export function useLeadQualityReport() {
                 })
             })
 
-            console.log("Formatted Data:", formattedData) // 🔍 Debug log
             setData(formattedData)
         } catch (err) {
             console.error(err)

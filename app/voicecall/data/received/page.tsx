@@ -494,8 +494,8 @@ function FeedbackModal({ row, currentUser, onClose, onRefresh }: { row: Received
                                 <div>Name: <strong style={{ color: "#0f172a" }}>{row.feedbackData.submittedBy.name || "—"}</strong></div>
                                 <div>Email: <span style={{ color: "#4f46e5", fontWeight: 600 }}>{row.feedbackData.submittedBy.email || "—"}</span></div>
                                 {row.feedbackData.submittedBy.id && <div>ID: <code style={{ fontSize: 11, background: "#f1f5f9", border: "1px solid #e2e8f0", padding: "2px 6px", borderRadius: 4, fontFamily: "monospace", color: "#0f172a" }}>{row.feedbackData.submittedBy.id}</code></div>}
-                                {(row.feedback_date || row.feedbackDate) && (
-                                    <div style={{ marginTop: 4, fontSize: 11, color: "#94a3b8" }}>Submitted at: {row.feedback_date || row.feedbackDate}</div>
+                                {row.feedback_date && (
+                                    <div style={{ marginTop: 4, fontSize: 11, color: "#94a3b8" }}>Submitted at: {row.feedback_date}</div>
                                 )}
                             </div>
                         </div>
@@ -1225,10 +1225,90 @@ function ReceivedTableInnerNoHeader({ data, allData, sentData, currentUser, refe
     const pendingTransferIds = Object.keys(pendingTransfer);
     const pendingKey = pendingIds.join(",");
     const pendingTransferKey = pendingTransferIds.join(",");
+    const pollingIntervalRef = useRef<number | null>(null);
     useEffect(() => {
         if (pendingIds.length === 0 && pendingTransferIds.length === 0) return;
-        const interval = setInterval(() => { refetchReceived(); }, 5000);
-        return () => clearInterval(interval);
+        const stopPolling = () => {
+            if (pollingIntervalRef.current !== null) {
+                window.clearInterval(pollingIntervalRef.current);
+                pollingIntervalRef.current = null;
+            }
+        };
+        const shouldPausePolling = () => document.hidden || document.visibilityState !== "visible" || !document.hasFocus();
+        const startPolling = () => {
+            if (shouldPausePolling() || pollingIntervalRef.current !== null) {
+                return;
+            }
+            pollingIntervalRef.current = window.setInterval(() => {
+                if (shouldPausePolling()) {
+                    stopPolling();
+                    return;
+                }
+                refetchReceived();
+            }, 5000) as unknown as number;
+        };
+        const syncPolling = () => {
+            if (pendingIds.length === 0 && pendingTransferIds.length === 0) {
+                stopPolling();
+                return;
+            }
+            if (shouldPausePolling()) {
+                stopPolling();
+                return;
+            }
+            startPolling();
+        };
+        const handleVisibilityChange = () => {
+            syncPolling();
+            if (!shouldPausePolling()) {
+                refetchReceived();
+            }
+        };
+        const handleWindowBlur = () => {
+            syncPolling();
+        };
+        const handleWindowFocus = () => {
+            syncPolling();
+            if (!shouldPausePolling()) {
+                refetchReceived();
+            }
+        };
+        const handlePageHide = () => {
+            syncPolling();
+        };
+        const handlePageShow = () => {
+            syncPolling();
+            if (!shouldPausePolling()) {
+                refetchReceived();
+            }
+        };
+        const handleFreeze = () => {
+            syncPolling();
+        };
+        const handleResume = () => {
+            syncPolling();
+            if (!shouldPausePolling()) {
+                refetchReceived();
+            }
+        };
+        syncPolling();
+        document.addEventListener("visibilitychange", handleVisibilityChange);
+        document.addEventListener("freeze", handleFreeze as EventListener);
+        document.addEventListener("resume", handleResume as EventListener);
+        window.addEventListener("blur", handleWindowBlur);
+        window.addEventListener("focus", handleWindowFocus);
+        window.addEventListener("pagehide", handlePageHide);
+        window.addEventListener("pageshow", handlePageShow);
+        return () => {
+            stopPolling();
+            document.removeEventListener("visibilitychange", handleVisibilityChange);
+            document.removeEventListener("freeze", handleFreeze as EventListener);
+            document.removeEventListener("resume", handleResume as EventListener);
+            window.removeEventListener("blur", handleWindowBlur);
+            window.removeEventListener("focus", handleWindowFocus);
+            window.removeEventListener("pagehide", handlePageHide);
+            window.removeEventListener("pageshow", handlePageShow);
+        };
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [pendingKey, pendingTransferKey]);
 
@@ -1601,7 +1681,7 @@ function getDateRange(filter: string): { from: Date | null; to: Date | null } {
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 function ReceivedDataPageInner() {
-    const { data: receivedApiData, loading: receivedLoading, isRefreshing: hookRefreshing, refetch: refetchReceived } = useReceivedLeads();
+    const { data: receivedApiData, loading: receivedLoading, isRefreshing: hookRefreshing, error: receivedError, refetch: refetchReceived } = useReceivedLeads();
     const { data: sentApiData, loading: sentLoading, refetch: refetchSent } = useSentLeads();
     const { hasPermission, user } = useAuth();
 
@@ -1655,7 +1735,7 @@ function ReceivedDataPageInner() {
     // ── Transform ─────────────────────────────────────────────────────────────
     const transformedReceived: ReceivedRow[] = useMemo(() => {
         if (!receivedApiData?.length) return receivedLoading ? RECEIVED_DATA : [];
-        return receivedApiData.map(r => ({
+        return receivedApiData.map((r: ReceivedRow) => ({
             ...r,
             // _ts_num/_dt_num already computed in hook from ISO strings — use directly
             _ts_num: r._ts_num ?? 0,
@@ -1672,7 +1752,7 @@ function ReceivedDataPageInner() {
     // Minimal sent transform — only enquiryId + notes needed for call history notes lookup
     const transformedSent: SentRow[] = useMemo(() => {
         if (!sentApiData?.length) return [];
-        return sentApiData.map(r => ({ enquiryId: r.enquiryId, notes: r.notes || "—" }));
+        return sentApiData.map((r: { enquiryId: string; notes?: string }) => ({ enquiryId: r.enquiryId, notes: r.notes || "—" }));
     }, [sentApiData]);
 
     // ── Show all records without deduplication ──────────────────────────────
@@ -1766,6 +1846,30 @@ function ReceivedDataPageInner() {
         );
     }
 
+    if (receivedError && receivedApiData.length === 0) {
+        return (
+            <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50 flex items-center justify-center px-4">
+                <div style={{ maxWidth: 560, width: "100%", background: "#fff", border: "1px solid #fecaca", borderRadius: 16, padding: "22px 24px", boxShadow: "0 12px 30px rgba(220,38,38,.08)" }}>
+                    <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
+                        <div style={{ width: 40, height: 40, borderRadius: 12, background: "#fef2f2", color: "#dc2626", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 20, fontWeight: 800 }}>!</div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: 18, fontWeight: 800, color: "#991b1b" }}>Could not load received calls</div>
+                            <div style={{ fontSize: 13, color: "#7f1d1d", marginTop: 6, lineHeight: 1.6 }}>{receivedError}</div>
+                            <div style={{ display: "flex", gap: 10, marginTop: 16, flexWrap: "wrap" }}>
+                                <button onClick={handleRefresh} style={{ background: "#dc2626", color: "#fff", border: "none", borderRadius: 8, padding: "9px 14px", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
+                                    Retry now
+                                </button>
+                                <button onClick={() => window.location.reload()} style={{ background: "#fff", color: "#991b1b", border: "1px solid #fecaca", borderRadius: 8, padding: "9px 14px", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
+                                    Reload page
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
     return (
         <div className="font-sans bg-[#f0f2f8] min-h-full text-slate-800">
             <style>{`
@@ -1800,6 +1904,21 @@ function ReceivedDataPageInner() {
             </div>
 
             {/* ── Filters ── */}
+            {receivedError && receivedApiData.length > 0 && (
+                <div className="mx-2 sm:mx-4 lg:mx-5 mt-4">
+                    <div style={{ display: "flex", alignItems: "flex-start", gap: 12, background: "#fff7ed", border: "1px solid #fdba74", borderRadius: 12, padding: "12px 14px", color: "#9a3412" }}>
+                        <div style={{ width: 28, height: 28, borderRadius: 8, background: "#ffedd5", color: "#c2410c", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontWeight: 900 }}>!</div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: 13, fontWeight: 800 }}>Background refresh failed</div>
+                            <div style={{ fontSize: 12.5, marginTop: 4, lineHeight: 1.6 }}>{receivedError}</div>
+                        </div>
+                        <button onClick={handleRefresh} style={{ background: "#ea580c", color: "#fff", border: "none", borderRadius: 8, padding: "8px 12px", fontSize: 12.5, fontWeight: 700, cursor: "pointer", flexShrink: 0 }}>
+                            Retry
+                        </button>
+                    </div>
+                </div>
+            )}
+
             <div className="mt-3 mx-2 sm:mx-4 lg:mx-5">
                 <div className="rounded-xl border border-slate-200 bg-white shadow-md">
                     <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 px-3 sm:px-5 py-3 sm:py-4 bg-gradient-to-r from-blue-100 via-white to-indigo-100 border-b border-slate-200 rounded-t-xl">
@@ -1818,7 +1937,7 @@ function ReceivedDataPageInner() {
                         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-6 gap-3">
                             <div className="flex flex-col gap-1.5 sm:col-span-2 xl:col-span-2">
                                 <label className="text-xs font-medium uppercase tracking-wide text-slate-500">Search Leads</label>
-                                <Input placeholder="Name, email, phone, ID, subject..." value={search} onChange={e => setSearch(e.target.value)} className="h-10 w-full rounded-md border-gray-300" />
+                                <Input placeholder="Name, email, phone, ID, subject..." value={search} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearch(e.target.value)} className="h-10 w-full rounded-md border-gray-300" />
                             </div>
                             <div className="flex flex-col gap-1.5">
                                 <label className="text-xs font-medium uppercase tracking-wide text-slate-500">Date Range</label>
@@ -1891,11 +2010,11 @@ function ReceivedDataPageInner() {
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3 pt-3 border-t border-slate-200">
                                 <div className="flex flex-col gap-1.5">
                                     <label className="text-xs font-medium uppercase tracking-wide text-slate-500">Start Date</label>
-                                    <Input type="date" value={customDate.start} onChange={e => setCustomDate({ ...customDate, start: e.target.value })} className="h-10 w-full rounded-md border-gray-300" />
+                                    <Input type="date" value={customDate.start} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setCustomDate({ ...customDate, start: e.target.value })} className="h-10 w-full rounded-md border-gray-300" />
                                 </div>
                                 <div className="flex flex-col gap-1.5">
                                     <label className="text-xs font-medium uppercase tracking-wide text-slate-500">End Date</label>
-                                    <Input type="date" value={customDate.end} onChange={e => setCustomDate({ ...customDate, end: e.target.value })} className="h-10 w-full rounded-md border-gray-300" />
+                                    <Input type="date" value={customDate.end} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setCustomDate({ ...customDate, end: e.target.value })} className="h-10 w-full rounded-md border-gray-300" />
                                 </div>
                             </div>
                         )}

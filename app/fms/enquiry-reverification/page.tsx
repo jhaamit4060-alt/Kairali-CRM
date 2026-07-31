@@ -64,6 +64,7 @@ export default function EnquiryReverificationPage() {
     const [isInitialLoading, setIsInitialLoading] = useState(true)
     const [isFilterFetching, setIsFilterFetching] = useState(false)
     const [totalEnquiries, setTotalEnquiries] = useState(0)
+    const [loadError, setLoadError] = useState<string | null>(null)
 
     const [sortField, setSortField] = useState("generate_date_time")
     const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc")
@@ -89,6 +90,7 @@ export default function EnquiryReverificationPage() {
 
     // Fetch enquiries from MySQL DB
     const fetchEnquiries = async () => {
+        setLoadError(null)
         try {
             const skipFilters = websitesOptions.length > 0 && agentsOptions.length > 0
             let url = `/api/fms/enquiry-reverification?page=${currentPage}&limit=${pageSize}&skipFilters=${skipFilters}&`
@@ -161,21 +163,29 @@ export default function EnquiryReverificationPage() {
             if (toDate) url += `to=${toDate}&`
 
             const res = await fetch(url)
-            const json = await res.json()
-            if (json.success) {
-                setEnquiries(json.data)
-                setTotalEnquiries(json.pagination.total)
-                setTotalPages(json.pagination.totalPages)
-                if (json.kpi) {
-                    setKpi(json.kpi)
-                }
-                if (json.filters) {
-                    setWebsitesOptions(json.filters.websites || [])
-                    setAgentsOptions(json.filters.agents || [])
-                }
+            const json = await res.json().catch(() => null)
+
+            if (!res.ok) {
+                throw new Error(json?.error || `Request failed (${res.status} ${res.statusText})`)
             }
-        } catch (error) {
+            if (!json?.success) {
+                throw new Error(json?.error || "Server returned an unsuccessful response")
+            }
+
+            setEnquiries(json.data)
+            setTotalEnquiries(json.pagination.total)
+            setTotalPages(json.pagination.totalPages)
+            if (json.kpi) {
+                setKpi(json.kpi)
+            }
+            if (json.filters) {
+                setWebsitesOptions(json.filters.websites || [])
+                setAgentsOptions(json.filters.agents || [])
+            }
+            setLoadError(null)
+        } catch (error: any) {
             console.error("Failed fetching enquiries:", error)
+            setLoadError(error?.message || "Failed to load enquiries.")
         } finally {
             setIsInitialLoading(false)
         }
@@ -693,6 +703,26 @@ export default function EnquiryReverificationPage() {
                         </div>
                     </div>
 
+                    {loadError && (
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-4 sm:px-5 py-3 bg-red-50 border-b border-red-200">
+                            <div className="flex items-start gap-2 min-w-0">
+                                <AlertCircle className="h-4 w-4 text-red-600 mt-0.5 flex-shrink-0" />
+                                <div className="min-w-0">
+                                    <p className="text-xs font-semibold text-red-800">Couldn't load enquiries</p>
+                                    <p className="text-[11px] text-red-700 break-words">{loadError}</p>
+                                </div>
+                            </div>
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => fetchEnquiries()}
+                                className="w-full sm:w-auto bg-white border-red-300 text-red-700 font-medium hover:bg-red-100"
+                            >
+                                <RefreshCw className="h-3.5 w-3.5 mr-1.5" /> Retry
+                            </Button>
+                        </div>
+                    )}
+
                     <div className="overflow-x-auto w-full">
                         <table className="min-w-full divide-y divide-slate-200 text-xs border-collapse">
                             <thead style={{ backgroundColor: '#1e3a5f' }} className="sticky top-0 z-20">
@@ -767,6 +797,26 @@ export default function EnquiryReverificationPage() {
                                 </tr>
                             </thead>
                             <tbody>
+
+                                {loadError && sortedEnquiries.length === 0 && (
+                                    <tr>
+                                        <td colSpan={19} className="py-10 px-4 text-center">
+                                            <div className="flex flex-col items-center gap-2">
+                                                <AlertCircle className="h-6 w-6 text-red-500" />
+                                                <p className="text-sm font-semibold text-slate-700">Unable to load enquiries</p>
+                                                <p className="text-xs text-slate-500 max-w-md break-words">{loadError}</p>
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onClick={() => fetchEnquiries()}
+                                                    className="mt-1 bg-white border-slate-300 text-slate-700 font-medium hover:bg-slate-100"
+                                                >
+                                                    <RefreshCw className="h-3.5 w-3.5 mr-1.5" /> Retry
+                                                </Button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                )}
 
                                 {sortedEnquiries.map((enq) => (
                                     <tr key={enq.id} className="border-b border-slate-100 hover:bg-slate-50/50 transition group">

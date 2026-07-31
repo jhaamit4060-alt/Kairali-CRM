@@ -1403,7 +1403,7 @@ export function Part2Button({ partnerName }: { partnerName?: string }) {
         <PhoneCall size={14} /> Start Qualifying Call
       </button>
       <Part2Modal isOpen={open} onClose={() => setOpen(false)}
-        onSubmit={d => console.log('Part 2:', d)} partnerName={partnerName} />
+        onSubmit={() => {}} partnerName={partnerName} />
     </>
   );
 }

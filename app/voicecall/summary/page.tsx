@@ -1076,7 +1076,6 @@ export default function AIVoiceSummaryReportPage() {
                 }
             } else {
                 rcvdRows = rcvdRows.filter(r => {
-                    console.log(Object.keys(rcvdRows[0]));
                     const qStatus = (r.calculatedstatus || "").trim().toLowerCase();;
                     const cIntent = (r.customerIntent || "").toLowerCase();
 

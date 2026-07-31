@@ -531,7 +531,6 @@ function AnalyticsDashboardInline({
 
 
         let totalPIAmount = 0;
-        // console.log('Calculating KPIs from', filteredWithPI);
         filteredWithPI.forEach(b => {
             const piAmt = b.paymentVerify.piAmountSales || 0;
             const invAmt = b.paymentVerify.tallyInvoiceAmount || 0;
@@ -875,7 +874,6 @@ function AnalyticsDashboardInline({
             }))
             .sort((a, b) => b.outstanding - a.outstanding);
     }, [filteredWithPI]);
-    // console.log('Overdue Accounts List:', filteredWithPI);
 
     // Account Head Verification Pending — bookings missing actualRaw, shared by KPI card + pendingActions list
     const accountHeadVerificationList = useMemo(() => {
@@ -2192,7 +2190,6 @@ function AnalyticsDashboardInline({
                     </div>
                     <div className="p-2 flex-1 min-h-0" style={{ minHeight: 200 }}>
                         {/* {(() => {
-                            console.log('trendData:', trendData);
                             return null;
                         })()} */}
                         {trendData.length > 0 ? (
@@ -2488,7 +2485,6 @@ function AnalyticsDashboardInline({
                                     const varPct = Number(b.paymentVerify.differencePercentage) || 0;
                                     const status = Math.round(rcv) === Math.round(pi) ? 'Matched' : 'Unmatched';
                                     const verifiedBy = b.paymentVerify.doer || '—';
-                                    // console.log('booking', b);
                                     return (
                                         <tr key={i} className="hover:bg-slate-50 whitespace-nowrap">
                                             <td className="p-2 font-mono text-blue-600">{b.id}</td>

@@ -1,5 +1,6 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { getPool } from "@/lib/db";
+import { verifySessionCookieValue } from "@/lib/session";
 import fs from "fs";
 import path from "path";
 import os from "os";
@@ -7,13 +8,24 @@ import os from "os";
 // ─── Cache Config ─────────────────────────────────────────────────────────────
 let memoryCache: any[] | null = null;
 let lastFetchTime = 0;
-const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+const CACHE_TTL = 3 * 60 * 1000; // 5 minutes
 
 const noStoreHeaders = {
     "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
     "Pragma": "no-cache",
     "Expires": "0",
 };
+const MAX_SCAN_ROWS = 200000;
+const MAX_HISTORY_ROWS = 200000;
+
+function hasReceivedLeadsAccess(user: any): boolean {
+    const permissions = Array.isArray(user?.permissions) ? user.permissions : [];
+    return (
+        permissions.includes("all") ||
+        permissions.includes("ai_voice_received.view") ||
+        ["super_admin", "admin"].includes(String(user?.role || "").toLowerCase())
+    );
+}
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -144,8 +156,32 @@ function mapRow(row: any): object {
 
 // ─── GET Handler ──────────────────────────────────────────────────────────────
 
-export async function GET(request: Request) {
+export async function GET(request: NextRequest) {
     try {
+        const userCookie = request.cookies.get("kairali_user")?.value;
+
+        if (!userCookie) {
+            return NextResponse.json(
+                { success: false, error: "Access denied: Not logged in" },
+                { status: 401, headers: noStoreHeaders }
+            );
+        }
+
+        const user = verifySessionCookieValue(userCookie);
+        if (!user) {
+            return NextResponse.json(
+                { success: false, error: "Access denied: Invalid session" },
+                { status: 401, headers: noStoreHeaders }
+            );
+        }
+
+        if (!hasReceivedLeadsAccess(user)) {
+            return NextResponse.json(
+                { success: false, error: "Access denied: Insufficient permissions" },
+                { status: 403, headers: noStoreHeaders }
+            );
+        }
+
         const { searchParams } = new URL(request.url);
         const force = searchParams.get("force") === "1";
         const initialId = searchParams.get("initialId");
@@ -159,6 +195,7 @@ export async function GET(request: Request) {
                     SELECT * FROM ai_voice_leads_received
                     WHERE initial_id = ?
                     ORDER BY id DESC
+                    LIMIT ${MAX_HISTORY_ROWS}
                 `, [initialId]) as any[];
                 return NextResponse.json((rows as any[]).map(mapRow));
             } finally {
@@ -201,7 +238,8 @@ export async function GET(request: Request) {
         try {
             // Efficiency: 
             // - ORDER BY id DESC is extremely fast due to PRIMARY KEY.
-            // - We limit to 15,000 rows to keep the JSON payload manageable while providing plenty of history.
+            // - We cap the scan to a practical window so cold-cache refreshes do not walk the
+            //   entire historical table on every request.
             // - 46k+ rows with longtext columns is too slow for browser parsing.
             [rows] = await connection.execute(`
                 SELECT
@@ -233,7 +271,7 @@ FROM    ai_voice_leads_received a
 INNER JOIN (
     SELECT MAX(id) AS max_id
     FROM (
-        SELECT id, initial_id FROM ai_voice_leads_received ORDER BY id DESC LIMIT 10000000
+        SELECT id, initial_id FROM ai_voice_leads_received ORDER BY id DESC LIMIT ${MAX_SCAN_ROWS}
     ) t
     GROUP BY initial_id
 ) b ON a.id = b.max_id

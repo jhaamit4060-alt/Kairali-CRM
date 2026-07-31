@@ -40,8 +40,6 @@ export function KPISection({ filters }: { filters: any }) {
   useEffect(() => {
     const fetchKPIData = async (filters: any) => {
       try {
-        console.log("KPI filters changed:", filters)
-
         setError(null)
         const response = await fetch("/api/marketing/kpis")
 

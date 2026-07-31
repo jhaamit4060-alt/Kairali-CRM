@@ -786,11 +786,6 @@ export default function VillaRaagBookingPage() {
     return isCancelled ? sum + (booking.amount || 0) : sum
   }, 0)
 
-  if (cancelledAmount > 0) {
-    console.log("Cancelled bookings found - Total cancelled amount:" + cancelledAmount.toLocaleString())
-    console.log("Cancelled bookings count:", cancelledBookings)
-  }
-
   const chartData = [
     { name: "Confirmed", value: confirmedBookings, color: "#059669" },
     { name: "Pending", value: pendingBookings, color: "#d97706" },
@@ -905,8 +900,6 @@ export default function VillaRaagBookingPage() {
         setShowPaymentModal(true)
         break
       case "payment_details":
-        console.log("Selected booking:", booking)
-        console.log("Payment records:", booking.paymentRecords)
         if (!booking) return
 
         const bookingId = booking.bookingId || booking.id
@@ -943,7 +936,6 @@ export default function VillaRaagBookingPage() {
         break
       }
       default:
-        console.log(`Action ${action} for booking ${bookingId}`)
     }
   }
 

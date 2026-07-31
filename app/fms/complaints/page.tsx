@@ -522,50 +522,6 @@ export default function ComplaintsPage() {
   }
 
   const handleActionSubmit = () => {
-    if (modalType === "staff") {
-      console.log("Department Staff Action:", {
-        complaint: selectedComplaint?.id,
-        status: staffActionStatus,
-        resolvedBy: resolvedBy,
-        points: staffActionPoints,
-        remarks: staffRemarks,
-        proof: uploadedFile || capturedImage,
-        notes: actionNotes,
-      })
-    } else if (modalType === "head") {
-      console.log("Department Head Action:", {
-        complaint: selectedComplaint?.id,
-        status: staffActionStatus, // Reusing staffActionStatus for headActionStatus
-        resolvedBy: resolvedBy,
-        points: staffActionPoints, // Reusing staffActionPoints for headActionPoints
-        remarks: staffRemarks, // Reusing staffRemarks for headRemarks
-        proof: uploadedFile || capturedImage,
-        notes: actionNotes,
-      })
-    } else if (modalType === "manager") {
-      console.log("General Manager Verification:", {
-        complaint: selectedComplaint?.id,
-        status: gmActionStatus,
-        // resolvedBy: resolvedBy, // Removed
-        points: staffActionPoints,
-        remarks: gmRemarks,
-        // proof: uploadedFile || capturedImage, // Removed
-        notes: actionNotes,
-      })
-    } else if (modalType === "management") {
-      console.log("Management Check:", {
-        complaint: selectedComplaint?.id,
-        status: managementActionStatus,
-        action: managementAction,
-        // resolvedBy: resolvedBy, // Removed
-        // points: staffActionPoints, // Removed
-        remarks: managementRemarks,
-        // proof: uploadedFile || capturedImage, // Removed
-        notes: actionNotes,
-      })
-    } else {
-      console.log(`Action: ${modalType}, Complaint: ${selectedComplaint?.id}, Notes: ${actionNotes}`)
-    }
     handleModalClose()
   }
 

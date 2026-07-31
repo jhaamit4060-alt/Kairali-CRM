@@ -233,7 +233,6 @@ export default function App() {
           throw new Error(`HTTP error! status: ${res.status}`);
         }
         const rawJson = await res.json();
-        console.log("Raw JSON received on client:", rawJson);
         const list = rawJson && Array.isArray(rawJson.data) ? rawJson.data : (Array.isArray(rawJson) ? rawJson : []);
 
         const parseNum = (val: any): number => {
@@ -330,7 +329,6 @@ export default function App() {
         });
 
         if (active) {
-          console.log("Fetched live data from local API proxy:", mapped);
           setAgentData(mapped);
           setLoading(false);
         }
@@ -407,7 +405,6 @@ export default function App() {
 
   const rows = useMemo(() => {
     const { from, to } = getDateBounds();
-    console.log("Filtering rows. Date bounds:", { from, to }, "dateRange:", dateRange, "agentData length:", agentData.length);
     let filtered = agentData.filter(r => {
       const matchName = !name || r.name.toLowerCase().includes(name.toLowerCase());
       let matchDate = true;
@@ -439,18 +436,8 @@ export default function App() {
       const matchLogin = login === "ALL" || (login === "YES" ? r.asLoggedIn : !r.asLoggedIn);
 
       const isMatch = matchName && matchDate && matchComp && matchLogin;
-      if (!isMatch) {
-        console.log("Filtered out agent:", r.name, {
-          matchName,
-          matchDate,
-          matchComp,
-          matchLogin,
-          agentDetails: { date: r.date, campaign: r.campaign, asLoggedIn: r.asLoggedIn }
-        });
-      }
       return isMatch;
     });
-    console.log("Filtered rows count before sort:", filtered.length);
 
     if (sortConfig.field) {
       filtered.sort((a, b) => {

@@ -134,12 +134,6 @@ export function useAccountsTracker() {
             const response = await fetch(API_URL);
             if (!response.ok) throw new Error('Failed to fetch data');
             const result = await response.json();
-            console.log('API Response received:', {
-                success: result.success,
-                hasData: !!result.data,
-                isArray: result?.data,
-                dataLength: result.data?.length,
-            });
 
             if (result.success === true && Array.isArray(result.data)) {
                 const mappedData: Booking[] = result.data.map((item: any) => {

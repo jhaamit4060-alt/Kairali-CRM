@@ -780,7 +780,6 @@ export function useNewOrderFMS() {
             const baseRows = extractDataArray(baseJson);
 
             if (!Array.isArray(baseRows) || baseRows.length === 0) {
-                console.error('[FMS] Base API response:', JSON.stringify(baseJson).slice(0, 500));
                 throw new Error(
                     baseJson?.message ??
                     baseJson?.error ??
@@ -810,7 +809,6 @@ export function useNewOrderFMS() {
 
             // RENDER BASE DATA IMMEDIATELY
             if (version === fetchVersion.current) {
-                console.log(`[FMS] Base table loaded: ${ordersMap.size} records`);
                 setOrders(Array.from(ordersMap.values()));
                 setLoading(false);
             }
@@ -868,8 +866,6 @@ export function useNewOrderFMS() {
                     }
 
                     if (mapChanged && version === fetchVersion.current) {
-                        console.log("version matched : ", fetchVersion.current, "version", version, "current stage : ", stage.type, "isapplied", mapChanged)
-
                         setOrders(Array.from(ordersMap.values()));
                     }
                 } catch (e: any) {

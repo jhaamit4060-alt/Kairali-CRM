@@ -108,9 +108,11 @@ export function useReceivedLeads() {
     const [data, setData] = useState<ReceivedLead[]>([]);
     const [loading, setLoading] = useState(true);
     const [isRefreshing, setIsRefreshing] = useState(false);
+    const [error, setError] = useState<string | null>(null);
 
     const fetchData = useCallback(async (force = false) => {
         try {
+            setError(null);
             if (data.length === 0) setLoading(true);
             else setIsRefreshing(true);
 
@@ -135,11 +137,20 @@ export function useReceivedLeads() {
                 cache: force ? "no-store" : "default",
                 headers: force ? { "Cache-Control": "no-cache" } : undefined,
             });
+            if (!res.ok) {
+                let message = `Request failed with HTTP ${res.status}`;
+                try {
+                    const payload = await res.json();
+                    if (payload?.error) message = String(payload.error);
+                } catch {
+                    // If the server did not return JSON, keep the HTTP-based message.
+                }
+                throw new Error(message);
+            }
             const raw = await res.json();
 
             if (!Array.isArray(raw)) {
-                console.error("[useReceivedLeads] Expected array from API");
-                return;
+                throw new Error("[useReceivedLeads] Expected array from API");
             }
 
             const finalData: ReceivedLead[] = raw.map((r: any) => {
@@ -225,9 +236,12 @@ export function useReceivedLeads() {
             setData(finalData);
             await setIDBCache(CACHE_KEY, finalData);
             localStorage.setItem(CACHE_TIME_KEY, Date.now().toString());
+            setError(null);
 
         } catch (err) {
+            const message = err instanceof Error ? err.message : "Failed to load received leads";
             console.error("[useReceivedLeads] Error:", err);
+            setError(message);
         } finally {
             setLoading(false);
             setIsRefreshing(false);
@@ -242,5 +256,5 @@ export function useReceivedLeads() {
         return () => window.removeEventListener(LEADS_CACHE_CLEARED_EVENT, handleClear);
     }, [fetchData]);
 
-    return { data, loading, isRefreshing, refetch: () => fetchData(true) };
+    return { data, loading, isRefreshing, error, refetch: () => fetchData(true) };
 }

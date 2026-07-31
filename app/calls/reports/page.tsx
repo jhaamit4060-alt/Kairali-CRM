@@ -10,6 +10,7 @@ import {
   Download, Printer, TrendingUp, TrendingDown, TableIcon, BarChart3,
   ChevronUp, ChevronDown, Filter, Search, Award, Activity,
   ChevronsUpDown, Phone, UserCheck, UserPlus, ChevronRight, Calendar, X,
+  AlertTriangle, RefreshCw,
 } from "lucide-react"
 import { format } from "date-fns"
 import {
@@ -119,6 +120,9 @@ export default function CallReportPage() {
     else document.body.style.overflow = ""
     return () => { document.body.style.overflow = "" }
   }, [showLoader])
+
+  // Load failure is only surfaced once the loader has fully cleared
+  const loadFailed = !loading && !showLoader && !!error
 
   /* ─── filter mode handlers ──────────────────────────────────────────────── */
   const handleDateFilterChange = (val: string) => {
@@ -670,6 +674,29 @@ export default function CallReportPage() {
             </div>
           </header>
 
+          {/* ── LOAD FAILURE PANEL ─────────────────────────────────────────── */}
+          {loadFailed && (
+            <div role="alert" className="rounded-2xl border border-red-200 bg-red-50 shadow-[0_8px_24px_rgba(15,23,42,0.08)] px-4 sm:px-6 py-5">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+                <div className="w-10 h-10 rounded-xl bg-red-100 border border-red-200 flex items-center justify-center shrink-0">
+                  <AlertTriangle className="w-5 h-5 text-red-600" />
+                </div>
+                <div className="flex-1">
+                  <h3 className="text-sm sm:text-base font-semibold text-red-800 leading-tight">Could not load calls report data</h3>
+                  <p className="text-xs sm:text-sm text-red-700/90 mt-1 break-words">{error}</p>
+                  <p className="text-xs text-red-700/70 mt-1">Metrics and tables below may be empty or out of date.</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => refetch()}
+                  className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white bg-red-600 border border-red-600 shadow-sm hover:bg-red-700 active:scale-[0.98] transition-all duration-200"
+                >
+                  <RefreshCw className="w-4 h-4" />Retry
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* ── FILTERS ────────────────────────────────────────────────────── */}
           <div className="rounded-2xl border border-slate-200 bg-white shadow-[0_8px_24px_rgba(15,23,42,0.08)] overflow-hidden">
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 px-4 sm:px-6 py-4 sm:py-5 bg-gradient-to-r from-slate-50 via-slate-100 to-slate-50 border-b border-slate-200">
@@ -940,9 +967,25 @@ export default function CallReportPage() {
                   </div>
                 ) : filteredDateGroups.length === 0 ? (
                   <div className="flex flex-col items-center justify-center py-20">
-                    <Calendar className="h-12 w-12 text-slate-300 mb-4" />
-                    <p className="text-base font-semibold text-slate-600 mb-1">No data found</p>
-                    <p className="text-sm text-slate-400">Try adjusting your filters</p>
+                    {loadFailed ? (
+                      <>
+                        <AlertTriangle className="h-12 w-12 text-red-300 mb-4" />
+                        <p className="text-base font-semibold text-slate-600 mb-1">Data could not be loaded</p>
+                        <button
+                          type="button"
+                          onClick={() => refetch()}
+                          className="mt-2 inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-slate-700 bg-white border border-slate-300 shadow-sm hover:bg-slate-100 active:scale-[0.98] transition-all duration-200"
+                        >
+                          <RefreshCw className="w-4 h-4" />Retry
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <Calendar className="h-12 w-12 text-slate-300 mb-4" />
+                        <p className="text-base font-semibold text-slate-600 mb-1">No data found</p>
+                        <p className="text-sm text-slate-400">Try adjusting your filters</p>
+                      </>
+                    )}
                   </div>
                 ) : (
                   <>

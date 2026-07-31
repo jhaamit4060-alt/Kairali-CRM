@@ -237,7 +237,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (data.success && data.rolePermissions) {
         setRolePermissions(data.rolePermissions)
-        console.log("✅ Role permissions loaded from Google Sheets")
 
         // Cache the permissions
         localStorage.setItem("cached_role_permissions", JSON.stringify({
@@ -252,7 +251,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     } catch (error) {
       console.error("❌ Error loading role permissions:", error)
-      console.log("📌 Using fallback permissions")
       return fallbackRolePermissions
     }
   }
@@ -286,7 +284,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
           if (cacheAge < ONE_HOUR) {
             setRolePermissions(data)
-            console.log("✅ Using cached role permissions")
           }
         } catch (e) {
           console.warn("⚠️ Failed to parse cached permissions")
@@ -385,7 +382,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (user.permissions.includes("all")) return true
 
     // Check if user has the specific permission
-    // console.log(user.permissions, permission)
     return user.permissions.includes(permission)
   }
 
