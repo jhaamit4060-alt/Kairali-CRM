@@ -26,6 +26,19 @@ function getTodayLocalDate(): string {
   return getNowLocalDateTime().slice(0, 10);
 }
 
+export const CONVERSION_RATES: Record<string, number> = {
+  INR: 1,
+  USD: 85.74,
+  EUR: 89.26,
+  EURO: 89.26
+};
+
+export function convertCurrency(amount: number, from: string, to: string): number {
+  const fromRate = CONVERSION_RATES[(from || "INR").toUpperCase()] ?? 1;
+  const toRate = CONVERSION_RATES[(to || "INR").toUpperCase()] ?? 1;
+  return (amount * fromRate) / toRate;
+}
+
 // ─── Step 3: Additional Info ─────────────────────────────────────────────────
 export function StepAdditionalInfo({
   prefix = "", data, onChange, apiData, errors = {},
@@ -1071,10 +1084,17 @@ export function StepAdvancePayment({
   };
 
   const isLocked = !data.isAdvancePayment;
+  const bookingCurrency = currency || "INR";
+  const advCurrency = data.currency || bookingCurrency;
+
   const grandTotal = parseFloat(pricing?.paymentBreakdown?.grandTotal) || 0;
   const receivedAmount = parseFloat(data.amount) || 0;
-  const percentReceived = grandTotal > 0 ? ((receivedAmount / grandTotal) * 100).toFixed(2) : "0.00";
-  const pendingAmount = Math.max(0, grandTotal - receivedAmount).toFixed(2);
+
+  // Convert grand total (in booking currency) to the selected advance payment currency
+  const grandTotalInAdvCurrency = convertCurrency(grandTotal, bookingCurrency, advCurrency);
+
+  const percentReceived = grandTotalInAdvCurrency > 0 ? ((receivedAmount / grandTotalInAdvCurrency) * 100).toFixed(2) : "0.00";
+  const pendingAmount = Math.max(0, grandTotalInAdvCurrency - receivedAmount).toFixed(2);
 
   const currencyLabelMap: Record<string, string> = {
     INR: "Indian Rupee (INR)",

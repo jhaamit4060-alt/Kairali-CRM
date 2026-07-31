@@ -387,7 +387,7 @@ export function validateApprovalRemarks(v: any): string {
 // Real Drive IDs are long (typically 28-44 chars of [A-Za-z0-9_-]); this lets
 // us reject short/fake-looking IDs like "invalid123" as well as unrelated
 // text or non-Drive URLs, without needing a network call to Drive's API.
-const GOOGLE_DRIVE_LINK_PATTERN = /^https:\/\/drive\.google\.com\/(file\/d\/([a-zA-Z0-9_-]{25,})(\/[^\s]*)?|drive\/folders\/([a-zA-Z0-9_-]{25,})(\/[^\s]*)?|open\?id=([a-zA-Z0-9_-]{25,}))(\?[^\s]*)?$/;
+const GOOGLE_DRIVE_LINK_PATTERN = /^https:\/\/(drive|docs)\.google\.com\/[a-zA-Z0-9_./?=&%#+-]+$/i;
 
 export function validateGoogleDriveLink(v: any): string {
   const s = String(v ?? "").trim();

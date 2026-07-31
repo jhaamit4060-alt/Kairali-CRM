@@ -20,7 +20,7 @@ import {
   validateApprovalRemarks,
 } from "./BookingFormBase";
 import { Step0PrimaryGuest, Step1SecondaryGuests, Step2Children } from "./BookingFormSteps1";
-import { StepAdditionalInfo, StepTravelAgent, StepPaymentBreakdown, StepAdvancePayment, StepApproval } from "./BookingFormSteps2";
+import { StepAdditionalInfo, StepTravelAgent, StepPaymentBreakdown, StepAdvancePayment, StepApproval, convertCurrency } from "./BookingFormSteps2";
 
 // Current date/time formatted for the "Last Updated" header badge
 function now(): string {
@@ -686,9 +686,16 @@ function StepGroupGuests({
 // ─── Review Step ──────────────────────────────────────────────────────────────
 function StepReview({ bookingType, primaryGuest, primaryBookingDetails, groupInfo, pricing, advancePayment }: any) {
   const pb = pricing?.paymentBreakdown;
+  const bookingCurrency = pb?.currency || "INR";
+  const advCurrency = advancePayment?.currency || bookingCurrency;
+
   const grandTotalNum = parseFloat(pb?.grandTotal || "0");
   const receivedNum = advancePayment?.isAdvancePayment ? (parseFloat(advancePayment?.amount || "0") || 0) : 0;
-  const balanceDue = Math.max(0, grandTotalNum - receivedNum).toFixed(2);
+  
+  // Convert received amount from advance currency to booking currency for subtraction
+  const receivedNumInBookingCurrency = convertCurrency(receivedNum, advCurrency, bookingCurrency);
+  const balanceDue = Math.max(0, grandTotalNum - receivedNumInBookingCurrency).toFixed(2);
+
   return (
     <div className="kbf-card">
       <div className="kbf-card-header"><div className="kbf-card-step-no"><i className="fas fa-check" /></div><h2>Review & Submit</h2></div>
@@ -721,20 +728,30 @@ function StepReview({ bookingType, primaryGuest, primaryBookingDetails, groupInf
           <table className="kbf-review-table">
             <thead><tr><th colSpan={2}>Payment Summary</th></tr></thead>
             <tbody>
-              <tr><td>Treatment Total</td><td>{pb.treatmentTotal}</td></tr>
-              <tr><td>Room Total</td><td>{pb.roomTotal}</td></tr>
-              <tr><td>Food Total</td><td>{pb.foodTotal}</td></tr>
+              <tr><td>Treatment Total</td><td>{pb.treatmentTotal} {bookingCurrency}</td></tr>
+              <tr><td>Room Total</td><td>{pb.roomTotal} {bookingCurrency}</td></tr>
+              <tr><td>Food Total</td><td>{pb.foodTotal} {bookingCurrency}</td></tr>
               {parseFloat(pb.childRate || "0") > 0 && (
-                <tr><td>Child Amount</td><td>{pb.childRate}</td></tr>
+                <tr><td>Child Amount</td><td>{pb.childRate} {bookingCurrency}</td></tr>
               )}
-              <tr><td>Transportation</td><td>{pb.transportationTotal}</td></tr>
+              <tr><td>Transportation</td><td>{pb.transportationTotal} {bookingCurrency}</td></tr>
               {(pb.otherCharges || []).map((c: any, i: number) => (
-                <tr key={`oc-${i}`}><td>Other — {c.description}</td><td>{c.total}</td></tr>
+                <tr key={`oc-${i}`}><td>Other — {c.description}</td><td>{c.total} {bookingCurrency}</td></tr>
               ))}
-              <tr><td><strong>Grand Total</strong></td><td><strong>{pb.grandTotal}</strong></td></tr>
+              <tr><td><strong>Grand Total</strong></td><td><strong>{pb.grandTotal} {bookingCurrency}</strong></td></tr>
               <tr><td>Discount %</td><td>{pb.discountPercentage}%</td></tr>
-              <tr><td>Advance Received</td><td>{receivedNum.toFixed(2)}</td></tr>
-              <tr><td><strong>Balance Due</strong></td><td><strong>{balanceDue}</strong></td></tr>
+              <tr>
+                <td>Advance Received</td>
+                <td>
+                  {receivedNum.toFixed(2)} {advCurrency}
+                  {advCurrency !== bookingCurrency && (
+                    <span style={{ fontSize: "12px", color: "#666", marginLeft: "8px" }}>
+                      ({receivedNumInBookingCurrency.toFixed(2)} {bookingCurrency})
+                    </span>
+                  )}
+                </td>
+              </tr>
+              <tr><td><strong>Balance Due</strong></td><td><strong>{balanceDue} {bookingCurrency}</strong></td></tr>
             </tbody>
           </table>
         )}
@@ -1310,6 +1327,10 @@ export default function BookingForm({ bookingId, formType = "individual", onSucc
     const advGrandTotal = parseFloat(pricing?.paymentBreakdown?.grandTotal) || 0;
     const advReceived = parseFloat(advancePayment.amount) || 0;
     const adv = advancePayment.isAdvancePayment;
+    const bookingCurrency = currency || "INR";
+    const advCurrency = advancePayment.currency || bookingCurrency;
+    const advGrandTotalInAdvCurrency = convertCurrency(advGrandTotal, bookingCurrency, advCurrency);
+
     const advancePaymentPayload = {
       received: adv,
       date: adv && advancePayment.paymentReceivedDate ? advancePayment.paymentReceivedDate : todayStr,
@@ -1318,10 +1339,10 @@ export default function BookingForm({ bookingId, formType = "individual", onSucc
       location: adv ? (advancePayment.paymentLocation || "") : "",
       collectedBy: adv ? (advancePayment.paymentCollectionBy || "") : "",
       amount: adv ? advancePayment.amount : "",
-      totalAmount: advGrandTotal.toFixed(2),
-      percentage: advGrandTotal > 0 ? ((advReceived / advGrandTotal) * 100).toFixed(2) : "0.00",
-      pending: Math.max(0, advGrandTotal - advReceived).toFixed(2),
-      currency: currency,
+      totalAmount: advGrandTotalInAdvCurrency.toFixed(2),
+      percentage: advGrandTotalInAdvCurrency > 0 ? ((advReceived / advGrandTotalInAdvCurrency) * 100).toFixed(2) : "0.00",
+      pending: Math.max(0, advGrandTotalInAdvCurrency - advReceived).toFixed(2),
+      currency: advCurrency,
       screenshot: {
         fileName: adv ? (advancePayment.screenshotName || "") : "",
         mimeType: adv ? (advancePayment.screenshotType || "") : "",
@@ -1416,28 +1437,60 @@ export default function BookingForm({ bookingId, formType = "individual", onSucc
     };
     // debugger
     try {
-      const res = await fetch(SUBMIT_API, { method: "POST", body: JSON.stringify(payload) });
-      if (!res.ok) {
-        throw new Error(`Server returned HTTP ${res.status}: ${res.statusText}`);
+      const payloadStr = JSON.stringify(payload);
+      const isSmallPayload = payloadStr.length < 60000;
+      let res: Response | null = null;
+      let timedOut = false;
+
+      if (isSmallPayload) {
+        // Use keepalive so the request finishes in the background even if the page redirects
+        const fetchPromise = fetch(SUBMIT_API, {
+          method: "POST",
+          body: payloadStr,
+          keepalive: true,
+        });
+
+        // 6-second timeout for optimistic redirect
+        const timeoutPromise = new Promise<"timeout">((resolve) =>
+          setTimeout(() => resolve("timeout"), 6000)
+        );
+
+        const raceResult = await Promise.race([fetchPromise, timeoutPromise]);
+        if (raceResult === "timeout") {
+          timedOut = true;
+        } else {
+          res = raceResult;
+        }
+      } else {
+        res = await fetch(SUBMIT_API, { method: "POST", body: payloadStr });
       }
-      const resData = await res.json().catch(() => null);
 
-      const isSuccess = resData && (
-        resData.success === true ||
-        resData.success === "true" ||
-        String(resData.status).toLowerCase() === "success" ||
-        String(resData.status).toLowerCase() === "ok"
-      );
+      if (timedOut) {
+        console.log("[BookingForm] Submission taking longer than 6s, proceeding optimistically in background.");
+        setSubmitting(false);
+        setSubmitted(true);
+        setShowThankYou(true);
+      } else if (res) {
+        if (!res.ok) {
+          throw new Error(`Server returned HTTP ${res.status}: ${res.statusText}`);
+        }
+        const resData = await res.json().catch(() => null);
 
-      if (!isSuccess) {
-        throw new Error(resData?.message || resData?.error || "Backend failed to process the booking.");
+        const isSuccess = resData && (
+          resData.success === true ||
+          resData.success === "true" ||
+          String(resData.status).toLowerCase() === "success" ||
+          String(resData.status).toLowerCase() === "ok"
+        );
+
+        if (!isSuccess) {
+          throw new Error(resData?.message || resData?.error || "Backend failed to process the booking.");
+        }
+
+        setSubmitting(false);
+        setSubmitted(true);
+        setShowThankYou(true);
       }
-
-      setSubmitting(false);
-      setSubmitted(true);
-      // Always show the thank-you modal first. onSuccess (e.g. navigation)
-      // is deferred until the user closes it — see the modal's onClose handlers below.
-      setShowThankYou(true);
     } catch (e: any) {
       setSubmitting(false);
       alert("❌ Failed to submit. Please try again.\n" + (e as any).message);

@@ -31,12 +31,14 @@ function getPriceIndex(currency: string): number {
   return indexMap[currency] || 0;
 }
 
-// Accepts both the typed values ('fixed'/'percentage') and the actual UI values ('%'/'cash')
 function applyDiscount(amount: number, discountType: string, discountValue: number): number {
+  const baseAmount = Math.max(0, amount);
   if (discountType === 'percentage' || discountType === '%') {
-    return amount - (amount * discountValue) / 100;
+    const clampedPercent = Math.min(100, Math.max(0, discountValue));
+    return baseAmount - (baseAmount * clampedPercent) / 100;
   }
-  return amount - discountValue;
+  const clampedFlat = Math.min(baseAmount, Math.max(0, discountValue));
+  return baseAmount - clampedFlat;
 }
 
 interface PricingProps {

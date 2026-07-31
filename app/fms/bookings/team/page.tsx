@@ -94,6 +94,19 @@ import { set } from "date-fns"
 import { el, fi, se } from "date-fns/locale"
 import { userAgent } from "next/server"
 
+const GLOBAL_CONVERSION_RATES: Record<string, number> = {
+  INR: 1,
+  USD: 85.74,
+  EUR: 89.26,
+  EURO: 89.26
+};
+
+function convertCurrency(amount: number, from: string, to: string): number {
+  const fromRate = GLOBAL_CONVERSION_RATES[(from || "INR").toUpperCase()] ?? 1;
+  const toRate = GLOBAL_CONVERSION_RATES[(to || "INR").toUpperCase()] ?? 1;
+  return (amount * fromRate) / toRate;
+}
+
 // 🔥 SAME LOGIC AS ACTIVE PMS BOOKING LIST
 function calculateDays(checkIn: string, checkOut: string) {
   if (!checkIn || !checkOut) return 0;
@@ -3931,9 +3944,12 @@ export default function SalesAccountsTeamPage() {
           const lastCollection = collectionHistoryArr?.length
             ? (() => {
               const latest = collectionHistoryArr.at(-1);
+              const bookingCurrency = accountsBooking?.currency || "INR";
               const totalReceived = collectionHistoryArr.reduce((sum: number, row: any) => {
                 const value = Number(getCollectionEntryValue(row, "receivedAmount")) || 0;
-                return sum + value;
+                const recordCurrency = getCollectionEntryValue(row, "currency") || bookingCurrency;
+                const convertedValue = convertCurrency(value, recordCurrency, bookingCurrency);
+                return sum + convertedValue;
               }, 0);
               return {
                 ...(Array.isArray(latest)

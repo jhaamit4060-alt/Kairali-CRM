@@ -199,21 +199,12 @@ export default function ArrivalTicketsModal({ open = true, booking = null as any
         package: booking?.programmeName || "",
     };
 
-    // Gate: arrival_planned must be set before the form is usable
+    // Gate: arrival_planned is no longer mandatory to open/fill the form
     const arrivalPlanned = guestTrackerData?.arrivalstage?.arrival_planned ?? "";
-    const isPlanned = Boolean(
-        arrivalPlanned && String(arrivalPlanned).trim() !== "" && String(arrivalPlanned).trim() !== "null"
-    );
+    const isPlanned = true;
 
-    // Gate: once check-in date has arrived/passed (today >= checkIn date), arrival form locks
-    const isLockedAfterCheckin = (() => {
-        if (!booking?.checkIn) return false;
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        const checkInDate = new Date(booking.checkIn);
-        checkInDate.setHours(0, 0, 0, 0);
-        return today >= checkInDate;
-    })();
+    // Gate: check-in date does not lock the form anymore
+    const isLockedAfterCheckin = false;
 
     const [pickupRequired, setPickupRequired] = useState("");
     const [arrivalTicketFile, setArrivalTicketFile] = useState<File | null>(null);
@@ -369,7 +360,7 @@ export default function ArrivalTicketsModal({ open = true, booking = null as any
                                 Arrival Tickets Upload
                             </p>
                             <p style={{ color: "rgba(255,255,255,0.8)", fontSize: 13, margin: "2px 0 0" }}>
-                                {isPlanned ? `Planned: ${formatDate(arrivalPlanned)}` : "Complete all fields to proceed"}
+                                {arrivalPlanned ? `Planned: ${formatDate(arrivalPlanned)}` : "Complete all fields to proceed"}
                             </p>
                         </div>
                     </div>

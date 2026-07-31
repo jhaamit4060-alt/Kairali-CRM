@@ -21,7 +21,13 @@ const AGENTS = new Set([
     "Manoj Nair FOM", "Nishant", "Vikesh Kumar", "Vibin S", "Adharsh A", "Shyamdas S",
 ]);
 
-const CONVERSION_RATES: Record<string, number> = { INR: 1, USD: 85.74, EURO: 89.26 };
+const CONVERSION_RATES: Record<string, number> = { INR: 1, USD: 85.74, EURO: 89.26, EUR: 89.26 };
+
+function convertCurrency(amount: number, from: string, to: string): number {
+    const fromRate = CONVERSION_RATES[(from || "INR").toUpperCase()] ?? 1;
+    const toRate = CONVERSION_RATES[(to || "INR").toUpperCase()] ?? 1;
+    return (amount * fromRate) / toRate;
+}
 
 const NAME_ALIASES: Record<string, string> = { Shoukath: "Shoukath Ali Moosa" };
 
@@ -178,16 +184,18 @@ export async function GET(req: NextRequest) {
             const finalData = finaltrtfMap[resId] ?? EMPTY_ACCOUNTS;
 
             const invoiceAmtRaw = parseFloat(r.invoice_amount) || 0;
+            const currency: string = r.currency || "INR";
             const payments = collectionHistoryLogs[resId] || [];
             let totalRecvRaw = 0;
             if (payments.length > 0) {
                 for (const p of payments) {
-                    totalRecvRaw += Number(p?.receivedAmount ?? p?.[4]) || 0;
+                    const amt = Number(p?.receivedAmount ?? p?.[4]) || 0;
+                    const pCur = String(p?.currency ?? p?.[3] ?? currency);
+                    totalRecvRaw += convertCurrency(amt, pCur, currency);
                 }
             } else {
                 totalRecvRaw = parseFloat(r.nb_pch_total_recv_amount) || 0;
             }
-            const currency: string = r.currency || "INR";
             const convRate = CONVERSION_RATES[currency] ?? 1;
             const convertedAmt = convRate * invoiceAmtRaw;
             const recvPct = invoiceAmtRaw > 0 ? (totalRecvRaw / invoiceAmtRaw) * 100 : 0;

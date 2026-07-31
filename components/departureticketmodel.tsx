@@ -196,21 +196,12 @@ export default function DepartureFlightModal({ open = true, booking = null as an
         package: booking?.programmeName || "",
     };
 
-    // Gate: departure_planned must be set before the form is usable
+    // Gate: departure_planned is no longer mandatory to open/fill the form
     const departurePlanned = guestTrackerData?.departurestage?.departure_planned ?? "";
-    const isPlanned = Boolean(
-        departurePlanned && String(departurePlanned).trim() !== "" && String(departurePlanned).trim() !== "null"
-    );
+    const isPlanned = true;
 
-    // Gate: once check-out date has arrived/passed (today >= checkOut date), departure form locks
-    const isLockedAfterCheckout = (() => {
-        if (!booking?.checkOut) return false;
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        const checkOutDate = new Date(booking.checkOut);
-        checkOutDate.setHours(0, 0, 0, 0);
-        return today >= checkOutDate;
-    })();
+    // Gate: check-out date does not lock the form anymore
+    const isLockedAfterCheckout = false;
 
     const [dropRequired, setDropRequired] = useState("");
     const [departureTicketFile, setDepartureTicketFile] = useState<File | null>(null);
@@ -356,7 +347,7 @@ export default function DepartureFlightModal({ open = true, booking = null as an
                                 Departure Flight Details & Ticket Upload
                             </p>
                             <p style={{ color: "rgba(255,255,255,0.8)", fontSize: 13, margin: "2px 0 0" }}>
-                                {isPlanned ? `Planned: ${formatDate(departurePlanned)}` : "Complete all fields to proceed"}
+                                {departurePlanned ? `Planned: ${formatDate(departurePlanned)}` : "Complete all fields to proceed"}
                             </p>
                         </div>
                     </div>
