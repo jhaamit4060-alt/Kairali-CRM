@@ -594,7 +594,13 @@ const BookingDetailPopup: React.FC<BookingDetailPopupProps> = ({
                     <div style={styles.headerRight}>
                         {(data.piLink || tableRowData?.piLink) && (
                             <a
-                                href={String(data.piLink || tableRowData?.piLink)}
+
+                                href={
+                                    `${String(data.piLink || tableRowData?.piLink)}${String(data.piLink || tableRowData?.piLink).includes("?")
+                                        ? "&"
+                                        : "?"
+                                    }piType=temp`
+                                }
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 style={{
@@ -613,7 +619,7 @@ const BookingDetailPopup: React.FC<BookingDetailPopupProps> = ({
                                     cursor: "pointer"
                                 }}
                             >
-                                📄 View PI
+                                View PI
                             </a>
                         )}
                         <span style={styles.badgeConfirmed}>{data.bookingStatus}</span>

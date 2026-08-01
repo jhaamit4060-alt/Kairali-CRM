@@ -52,6 +52,39 @@ const pagePermissions: Record<string, string> = {
   'fms/enquiry-reverification': 'cold_enquiry_reverification.view',
 }
 
+const isRestricted = (pathname: string) => {
+  const path = pathname.replace(/\/$/, '') || '/'
+
+  if (path.startsWith('/fms/complaints')) {
+    return true
+  }
+
+  const exactRestricted = [
+    '/helpdesk',
+    '/meet',
+    '/performance',
+    '/users',
+    '/calls',
+    '/fms',
+    '/fms/bookings',
+    '/fms/bookings/employee-wise',
+    '/fms/bookings/new',
+    '/fms/bookings/unverified',
+    '/fms/bookings/verified',
+    '/fms/doctor-consultation',
+    '/fms/v3',
+    '/leads/duplicates',
+    '/leads/duplicates/assign',
+    '/leads/duplicates/duplicates',
+    '/leads/duplicates_old',
+    '/reports',
+    '/reports/sales-conversion',
+    '/marketing-dashboard'
+  ]
+
+  return exactRestricted.includes(path)
+}
+
 export default function RouteGuard({ children }: { children: React.ReactNode }) {
   const { user, hasPermission, isLoading } = useAuth()
   const pathname = usePathname()
@@ -63,6 +96,13 @@ export default function RouteGuard({ children }: { children: React.ReactNode }) 
 
     // Allow access to login page for all users
     if (pathname === '/') return
+
+    // If route is restricted, redirect to access-denied
+    if (isRestricted(pathname)) {
+      router.replace('/access-denied')
+      return
+    }
+
     // Check if current path requires permission
     const requiredPermission = pagePermissions[pathname]
 

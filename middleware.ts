@@ -28,8 +28,45 @@ const protectedRoutes = [
   '/new-order-fms',
 ]
 
+const isRestricted = (pathname: string) => {
+  const path = pathname.replace(/\/$/, '') || '/'
+
+  if (path.startsWith('/fms/complaints')) {
+    return true
+  }
+
+  const exactRestricted = [
+    '/helpdesk',
+    '/meet',
+    '/performance',
+    '/users',
+    '/calls',
+    '/fms',
+    '/fms/bookings',
+    '/fms/bookings/employee-wise',
+    '/fms/bookings/new',
+    '/fms/bookings/unverified',
+    '/fms/bookings/verified',
+    '/fms/doctor-consultation',
+    '/fms/v3',
+    '/leads/duplicates',
+    '/leads/duplicates/assign',
+    '/leads/duplicates/duplicates',
+    '/leads/duplicates_old',
+    '/reports',
+    '/reports/sales-conversion',
+    '/marketing-dashboard'
+  ]
+
+  return exactRestricted.includes(path)
+}
+
 export function middleware(request: NextRequest) {
   const pathname = request.nextUrl.pathname
+
+  if (isRestricted(pathname)) {
+    return NextResponse.redirect(new URL('/access-denied', request.url))
+  }
 
   // Skip middleware for public routes
   if (publicRoutes.includes(pathname)) {

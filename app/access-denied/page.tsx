@@ -1,5 +1,7 @@
 'use client'
 
+import { useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { AlertTriangle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -7,6 +9,15 @@ import { Button } from '@/components/ui/button'
 export const dynamic = 'force-dynamic'
 
 export default function AccessDeniedPage() {
+  const router = useRouter()
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      router.replace('/dashboard')
+    }, 3000)
+    return () => clearTimeout(timer)
+  }, [router])
+
   const handleGoBack = () => {
     window.history.back()
   }
@@ -35,7 +46,7 @@ export default function AccessDeniedPage() {
         </div>
 
         <div className="flex gap-3">
-          <Link href="/" className="flex-1">
+          <Link href="/dashboard" className="flex-1">
             <Button className="w-full bg-blue-600 hover:bg-blue-700">
               Go Home
             </Button>
