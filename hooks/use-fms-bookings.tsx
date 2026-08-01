@@ -157,6 +157,7 @@ export interface Booking {
 
   // Guest tracker data (from ktahv_guest_tracker)
   guesttrackerdata?: {
+    exists?: boolean;
     primary_secondary: string;
     arrivalstage: {
       arrival_planned: string;
@@ -499,6 +500,7 @@ export function useBookings() {
               // Guest tracker data
               guesttrackerdata: item?.guesttrackerdata
                 ? {
+                  exists: item.guesttrackerdata.exists,
                   primary_secondary: item.guesttrackerdata.primary_secondary || "",
                   arrivalstage: {
                     arrival_planned: item.guesttrackerdata.arrivalstage?.arrival_planned || "",

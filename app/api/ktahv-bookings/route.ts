@@ -266,7 +266,7 @@ export async function GET(req: NextRequest) {
                     pendingAmount: parseFloat(r.nb_pch_pending_amount) || 0,
                     paymentCollectionHistory: r.nb_pch_history_link,
                 },
-                 bookingDetails: {
+                bookingDetails: {
                     bookingStatus: getActivityStatus(resId, accountsMap),
                     bookingType: r.booking_type,
                     bookingTakenBy: normalizeUserName(r.nb_bvs_doer),
@@ -352,6 +352,7 @@ export async function GET(req: NextRequest) {
                     deleteData?.foDoer, deleteData?.foStatus, deleteData?.foReamrks,
                 ]]),
                 guesttrackerdata: {
+                    exists: !!guestrow,
                     primary_secondary: guestrow?.primary_secondary ?? "",
                     arrivalstage: {
                         arrival_planned: guestrow?.arrival_planned ?? "",

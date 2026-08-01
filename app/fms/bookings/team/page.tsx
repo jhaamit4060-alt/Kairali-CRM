@@ -35,6 +35,28 @@ import InvoiceHistoryPopup from "@/components/InvoiceHistoryPopup"
 import ArrivalTicketsModal from "@/components/arrivalticketmodel"
 import DepartureFlightModal from "@/components/departureticketmodel"
 
+function processDateTime(inputValue: string): string {
+  if (!inputValue) return "";
+  const [datePart, timePart] = inputValue.split("T");
+  const now = new Date();
+  
+  if (!timePart || timePart === "00:00") {
+    const hours = String(now.getHours()).padStart(2, '0');
+    const minutes = String(now.getMinutes()).padStart(2, '0');
+    const seconds = String(now.getSeconds()).padStart(2, '0');
+    return `${datePart}T${hours}:${minutes}:${seconds}`;
+  } else {
+    return `${datePart}T${timePart}:00`;
+  }
+}
+
+function formatDateTime(dateStr?: string | Date | null): string {
+  if (!dateStr || dateStr === "-") return "—";
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return String(dateStr);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${pad(d.getDate())}-${pad(d.getMonth() + 1)}-${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+}
 
 import {
   DropdownMenu,
@@ -4235,7 +4257,11 @@ export default function SalesAccountsTeamPage() {
           throw new Error("Please fill all required fields")
         }
 
-        if (paymentData.receivedDate > new Date().toISOString().split("T")[0]) {
+        const inputDate = new Date(paymentData.receivedDate);
+        if (isNaN(inputDate.getTime())) {
+          throw new Error("Invalid Received Date")
+        }
+        if (inputDate > new Date()) {
           throw new Error("Received Date cannot be in the future")
         }
 
@@ -4801,9 +4827,12 @@ export default function SalesAccountsTeamPage() {
       return
     }
 
-    if (paymentData.receivedDate && paymentData.receivedDate > new Date().toISOString().split("T")[0]) {
-      toast.error("Received Date cannot be in the future")
-      return
+    if (paymentData.receivedDate) {
+      const inputDate = new Date(paymentData.receivedDate);
+      if (!isNaN(inputDate.getTime()) && inputDate > new Date()) {
+        toast.error("Received Date cannot be in the future")
+        return
+      }
     }
 
     try {
@@ -10858,17 +10887,22 @@ export default function SalesAccountsTeamPage() {
                         </Label>
                         <Input
                           id="received-date"
-                          type="date"
-                          max={new Date().toISOString().split("T")[0]}
-                          value={paymentData.receivedDate}
+                          type="datetime-local"
+                          max={new Date(new Date().getTime() + 60000).toISOString().slice(0, 16)} // allow current minute
+                          value={paymentData.receivedDate ? (paymentData.receivedDate.includes("T") ? paymentData.receivedDate.slice(0, 16) : new Date(paymentData.receivedDate).toISOString().slice(0, 16)) : ""}
                           onChange={(e) => {
-                            const todayStr = new Date().toISOString().split("T")[0];
                             const picked = e.target.value;
-                            if (picked && picked > todayStr) {
+                            if (!picked) {
+                              setPaymentData({ ...paymentData, receivedDate: "" });
+                              return;
+                            }
+                            const processed = processDateTime(picked);
+                            const inputDate = new Date(processed);
+                            if (inputDate > new Date()) {
                               toast.error("Received Date cannot be in the future");
                               return;
                             }
-                            setPaymentData({ ...paymentData, receivedDate: picked });
+                            setPaymentData({ ...paymentData, receivedDate: processed });
                           }}
                           className="
           border-blue-300
@@ -12604,18 +12638,23 @@ export default function SalesAccountsTeamPage() {
                       Received Date <span className="text-red-500">*</span>
                     </Label>
                     <Input
-                      type="date"
-                      max={new Date().toISOString().split("T")[0]}
+                      type="datetime-local"
+                      max={new Date(new Date().getTime() + 60000).toISOString().slice(0, 16)} // allow current minute
                       className="rounded-md border border-green-300 bg-white shadow-sm hover:border-green-400 focus:ring-2 focus:ring-green-400 transition-all"
-                      value={paymentData.receivedDate}
+                      value={paymentData.receivedDate ? (paymentData.receivedDate.includes("T") ? paymentData.receivedDate.slice(0, 16) : new Date(paymentData.receivedDate).toISOString().slice(0, 16)) : ""}
                       onChange={(e) => {
-                        const todayStr = new Date().toISOString().split("T")[0];
                         const picked = e.target.value;
-                        if (picked && picked > todayStr) {
+                        if (!picked) {
+                          setPaymentData({ ...paymentData, receivedDate: "" });
+                          return;
+                        }
+                        const processed = processDateTime(picked);
+                        const inputDate = new Date(processed);
+                        if (inputDate > new Date()) {
                           toast.error("Received Date cannot be in the future");
                           return;
                         }
-                        setPaymentData({ ...paymentData, receivedDate: picked });
+                        setPaymentData({ ...paymentData, receivedDate: processed });
                       }}
                     />
                   </div>
@@ -12960,16 +12999,21 @@ export default function SalesAccountsTeamPage() {
                           Approve Till Date <span className="text-red-500">*</span>
                         </Label>
                         <Input
-                          type="date"
+                          type="datetime-local"
                           disabled={isSubmitting}
-                          value={approvalData.approveTillDate}
-                          min={new Date().toLocaleDateString('en-CA')}
-                          onChange={(e) =>
+                          value={approvalData.approveTillDate ? (approvalData.approveTillDate.includes("T") ? approvalData.approveTillDate.slice(0, 16) : new Date(approvalData.approveTillDate).toISOString().slice(0, 16)) : ""}
+                          min={new Date().toISOString().slice(0, 16)}
+                          onChange={(e) => {
+                            const picked = e.target.value;
+                            if (!picked) {
+                              setApprovalData({ ...approvalData, approveTillDate: "" });
+                              return;
+                            }
                             setApprovalData({
                               ...approvalData,
-                              approveTillDate: e.target.value,
-                            })
-                          }
+                              approveTillDate: processDateTime(picked),
+                            });
+                          }}
                           className={`border-indigo-300 focus:ring-2 focus:ring-indigo-300 ${isSubmitting ? "opacity-70 cursor-not-allowed bg-slate-100" : ""
                             }`}
                         />
@@ -14161,6 +14205,7 @@ export default function SalesAccountsTeamPage() {
                   showFormSubmitSuccess(data?.responseMessage || "Arrival flight details saved")
                   setShowArrivalTicketModal(false)
                   setSelectedBookingForArrival(null)
+                  refetch()
                 }}
               />
             </div>,
@@ -14184,6 +14229,7 @@ export default function SalesAccountsTeamPage() {
                   showFormSubmitSuccess(data?.responseMessage || "Departure flight details saved")
                   setShowDepartureTicketModal(false)
                   setSelectedBookingForDeparture(null)
+                  refetch()
                 }}
               />
             </div>,
