@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { normalizeUserName } from "../lib/utils";
 
 // -----------------------------------------------------
 // FINAL BOOKING TYPE (ALL API FIELDS INCLUDED)
@@ -410,7 +411,7 @@ export function useBookings() {
               // Booking Details
               bookingStatus: item?.bookingDetails?.bookingStatus || "",
               bookingType: item?.bookingDetails?.bookingType || "",
-              bookingTakenBy: item?.bookingDetails?.bookingTakenBy || "",
+              bookingTakenBy: normalizeUserName(item?.bookingDetails?.bookingTakenBy || ""),
               groupBooking: item?.bookingDetails?.groupBooking || "",
               dataSource: item?.bookingDetails?.dataSource || "",
 
@@ -426,7 +427,7 @@ export function useBookings() {
               approvedTillDate: item?.approvedTillDate || "",
               approvalScreenShot: item?.approvalScreenShot || "",
               approvalRemarks: item?.approvalRemarks || "",
-              approvedBy: item?.approvedBy || "",
+              approvedBy: normalizeUserName(item?.approvedBy || ""),
 
               // Logs
               mlsummary: item?.mlsummary || "",
@@ -452,7 +453,7 @@ export function useBookings() {
               verfiedOrNot: item?.status || "Unverified",
 
               source: normalizeSource(item?.bookingDetails?.dataSource),
-              assignedTo: item?.bookingDetails?.bookingTakenBy || "",
+              assignedTo: normalizeUserName(item?.bookingDetails?.bookingTakenBy || ""),
               team: "sales",
 
               totalAmount: String(amount),
@@ -535,15 +536,25 @@ export function useBookings() {
         }).filter((item: any) => item !== null);
 
         const pendingData = json?.pendingCounts || [];
-        const formattedPending: PendingCount[] = pendingData.map((item: any) => {
-          return {
-            employeeName: item.employee || "-",
-            newBookings: item.newBookings || 0,
-            accountVerify: item.accountsVerify || 0,
-            finalTransfer: item.finalTransfer || 0,
-            deleteComplete: item.deleteComplete || 0,
-          };
-        });
+        const pendingMap: Record<string, PendingCount> = {};
+        for (const item of pendingData) {
+          const rawName = item.employee || "-";
+          const employeeName = normalizeUserName(rawName);
+          if (!pendingMap[employeeName]) {
+            pendingMap[employeeName] = {
+              employeeName,
+              newBookings: 0,
+              accountVerify: 0,
+              finalTransfer: 0,
+              deleteComplete: 0,
+            };
+          }
+          pendingMap[employeeName].newBookings += item.newBookings || 0;
+          pendingMap[employeeName].accountVerify += item.accountsVerify || 0;
+          pendingMap[employeeName].finalTransfer += item.finalTransfer || 0;
+          pendingMap[employeeName].deleteComplete += item.deleteComplete || 0;
+        }
+        const formattedPending: PendingCount[] = Object.values(pendingMap);
 
         if (isMounted) {
           setPendingCount(formattedPending);

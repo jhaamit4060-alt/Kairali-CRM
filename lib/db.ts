@@ -85,6 +85,7 @@ const DB_CONFIG = {
   waitForConnections: true,
   connectionLimit: 10,
   connectTimeout: 30000,
+  timezone: '+05:30', // Force IST — Vercel runs UTC so without this DATETIME values shift by +5:30
 }
 
 declare global {

@@ -3,6 +3,7 @@ import { verifySessionCookieValue } from "@/lib/session";
 import { getPool } from "@/lib/db";
 import { parseEnv } from "util";
 import AccountsTrackerPage from "@/app/accounts-tracker/page";
+import { normalizeUserName } from "@/lib/utils";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -19,6 +20,7 @@ const CHANNEL_MANAGERS = new Set([
 const AGENTS = new Set([
     "Sadik Rehman", "Pawan Kamra", "Pushpanshu Kumar", "Harpal Singh",
     "Manoj Nair FOM", "Nishant", "Vikesh Kumar", "Vibin S", "Adharsh A", "Shyamdas S",
+    "Shoukath Ali Moosa",
 ]);
 
 const CONVERSION_RATES: Record<string, number> = { INR: 1, USD: 85.74, EURO: 89.26, EUR: 89.26 };
@@ -264,10 +266,10 @@ export async function GET(req: NextRequest) {
                     pendingAmount: parseFloat(r.nb_pch_pending_amount) || 0,
                     paymentCollectionHistory: r.nb_pch_history_link,
                 },
-                bookingDetails: {
+                 bookingDetails: {
                     bookingStatus: getActivityStatus(resId, accountsMap),
                     bookingType: r.booking_type,
-                    bookingTakenBy: r.nb_bvs_doer,
+                    bookingTakenBy: normalizeUserName(r.nb_bvs_doer),
                     groupBooking: (String(r.booking_type || "").trim().toLowerCase() === "group" || (r.group_booking_count && r.group_booking_count != 0)) ? "Yes" : "No",
                     dataSource: r.data_source_auto,
                 },
@@ -300,12 +302,12 @@ export async function GET(req: NextRequest) {
                 repeat: r.repeat_client || "No",
                 clientCategory: r.client_category,
                 clientType: r.client_type,
-                bookingTakenBy: r.booker_name ? r.booker_name : "-",
+                bookingTakenBy: normalizeUserName(r.booker_name) || "-",
                 bookerEmail: r.booker_email ? r.booker_email : "-",
                 bookerPhone: r.booker_phone_no ? r.booker_phone_no : '-',
                 approvalGivenDate: parseIndianDateTime(r.nb_aphs_approval_given_date),
                 approvedTillDate: parseIndianDateTime(r.nb_aphs_approved_till_date),
-                approvedBy: r.nb_aphs_approved_by,
+                approvedBy: normalizeUserName(r.nb_aphs_approved_by),
                 approvalRemarks: r.nb_aphs_remarks,
                 approvalScreenShot: r.nb_aphs_approval_screenshot,
                 editActionStatus: r.nb_bvs_action_status !== "" && r.nb_bvs_actual !== "" ? r.nb_bvs_action_status : "pending",
@@ -325,7 +327,7 @@ export async function GET(req: NextRequest) {
                 autoReleasedAt: isAutoReleased ? autoReleasedMap[resId][33] : (underAutoReleaseDate?.status || false),
                 autoReleaseNotes: isAutoReleased ? autoReleasedMap[resId][24] : (underAutoReleaseDate?.reason || false),
                 piHistoryLink: r.nb_bvs_pi_link,
-                bSource: foundSource(r.nb_bvs_doer, r.company_name, r.data_source_auto) || "Others",
+                bSource: foundSource(normalizeUserName(r.nb_bvs_doer), r.company_name, r.data_source_auto) || "Others",
                 collectionHistory: collectionHistoryLogs[resId] ?? [],
                 doerDelay: r.nb_bvs_time_delay || "",
                 accountsDelay: accountsData.accountsDelay,
@@ -779,7 +781,7 @@ function resolveCanonicalName(
     empMap: Record<string, EmpCounts>,
 ): string {
     const resolved = names[rawName] ?? rawName;
-    const normalized = normalizeName(resolved);
+    const normalized = normalizeUserName(resolved);
     if (!normalized) return "";
     if (normalized in canonicalMap) return canonicalMap[normalized];
 

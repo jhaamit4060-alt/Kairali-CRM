@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, Suspense, use, useMemo, useCallback } from
 import { createPortal } from "react-dom"
 import { useRouter } from "next/navigation"
 import { useBookings, Booking } from "@/hooks/use-fms-bookings"
+import { normalizeUserName } from "@/lib/utils"
 import { useAuth } from "@/hooks/use-auth"
 import { StageWisePendingsReport } from "@/components/fms/stage-wise-pendings"
 import {
@@ -122,14 +123,7 @@ function calculateDays(checkIn: string, checkOut: string) {
 }
 
 function normalizeName(name?: string): string {
-  if (!name || name.toString().trim() === "") return "";
-  return name
-    .toString()
-    .trim()
-    .replace(/\s+/g, " ")
-    .split(" ")
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-    .join(" ");
+  return normalizeUserName(name);
 }
 
 function parseDDMMYYYYDate(dateStr: any): Date | null {
