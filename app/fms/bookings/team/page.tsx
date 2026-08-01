@@ -157,17 +157,19 @@ function parseDDMMYYYYDate(dateStr: any): Date | null {
   const parts = str.split(" ");
   const dateParts = parts[0].split("/");
   if (dateParts.length === 3) {
-    const day = parseInt(dateParts[0], 10);
-    const month = parseInt(dateParts[1], 10) - 1;
-    const year = parseInt(dateParts[2], 10);
-    let hours = 0, minutes = 0, seconds = 0;
+    const day = String(dateParts[0]).padStart(2, "0");
+    const month = String(dateParts[1]).padStart(2, "0");
+    const year = dateParts[2];
+    let hours = "00", minutes = "00", seconds = "00";
     if (parts[1]) {
       const timeParts = parts[1].split(":");
-      hours = parseInt(timeParts[0], 10) || 0;
-      minutes = parseInt(timeParts[1], 10) || 0;
-      seconds = parseInt(timeParts[2], 10) || 0;
+      hours = String(timeParts[0] || "00").padStart(2, "0");
+      minutes = String(timeParts[1] || "00").padStart(2, "0");
+      seconds = String(timeParts[2] || "00").padStart(2, "0");
     }
-    const d = new Date(year, month, day, hours, minutes, seconds);
+    // Parse specifically as IST (+05:30)
+    const isoStr = `${year}-${month}-${day}T${hours}:${minutes}:${seconds}+05:30`;
+    const d = new Date(isoStr);
     if (!isNaN(d.getTime())) return d;
   }
 
@@ -179,7 +181,9 @@ function parseDDMMYYYYDate(dateStr: any): Date | null {
 function formatSafeDateString(dateStr: any, isLocalTime = false): string {
   const d = parseDDMMYYYYDate(dateStr);
   if (!d) return "-";
-  return isLocalTime ? d.toLocaleString() : d.toLocaleDateString();
+  return isLocalTime
+    ? d.toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })
+    : d.toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata" });
 }
 
 function getNormalizedGroupBooking(val: any): boolean | null {
@@ -587,9 +591,66 @@ export default function SalesAccountsTeamPage() {
       if (Array.isArray(fetchedBookings)) {
         // Filter bookings based on user permissions
         const permissionFilteredBookings = fetchedBookings.filter(booking => canUserViewBooking(booking))
-        // Apply every valid fetched array (including an empty one) so a genuinely
-        // empty server response clears stale rows instead of leaving them behind.
-        _setBookings(permissionFilteredBookings)
+        
+        _setBookings(prevBookings => {
+          return permissionFilteredBookings.map(fetched => {
+            const local = prevBookings.find(b => b.bookingId === fetched.bookingId);
+            if (!local) return fetched;
+
+            const updated = { ...fetched };
+
+            // Merge sales verification status
+            if (local.salesPersonStage?.["1"]?.actual && !fetched.salesPersonStage?.["1"]?.actual) {
+              updated.salesPersonStage = {
+                ...fetched.salesPersonStage,
+                "1": { ...fetched.salesPersonStage?.["1"], ...local.salesPersonStage["1"] }
+              };
+            }
+
+            // Merge accounts verification stages
+            const mergedAccounts = { ...fetched.accountsPersonStage };
+            let accountsChanged = false;
+            [1, 2, 3].forEach(stageNum => {
+              const key = stageNum.toString();
+              if (local.accountsPersonStage?.[key]?.actual && !fetched.accountsPersonStage?.[key]?.actual) {
+                mergedAccounts[key] = { ...fetched.accountsPersonStage?.[key], ...local.accountsPersonStage[key] };
+                accountsChanged = true;
+              }
+            });
+            if (accountsChanged) {
+              updated.accountsPersonStage = mergedAccounts;
+              updated.accountsVerifyStatus = local.accountsVerifyStatus;
+            }
+
+            // Merge front office stages
+            const mergedFo = { ...fetched.foPersonStage };
+            let foChanged = false;
+            [1, 2].forEach(stageNum => {
+              const key = stageNum.toString();
+              if (local.foPersonStage?.[key]?.actual && !fetched.foPersonStage?.[key]?.actual) {
+                mergedFo[key] = { ...fetched.foPersonStage?.[key], ...local.foPersonStage[key] };
+                foChanged = true;
+              }
+            });
+            if (foChanged) {
+              updated.foPersonStage = mergedFo;
+              updated.frontOfficeStatus = local.frontOfficeStatus;
+            }
+
+            // Merge checkout verification status
+            if (local.checkOutPersonStage?.["1"]?.actual && !fetched.checkOutPersonStage?.["1"]?.actual) {
+              updated.checkOutPersonStage = {
+                ...fetched.checkOutPersonStage,
+                "1": { ...fetched.checkOutPersonStage?.["1"], ...local.checkOutPersonStage["1"] }
+              };
+              updated.checkoutVerificationStatus = local.checkoutVerificationStatus;
+              updated.checkoutVerificationRemarks = local.checkoutVerificationRemarks;
+              updated.paymentSettlementStatus = local.paymentSettlementStatus;
+            }
+
+            return updated;
+          });
+        });
       }
     } catch (e) {
       console.error("Failed to apply fetched bookings:", e)
@@ -830,6 +891,7 @@ export default function SalesAccountsTeamPage() {
     // Snapshot the table row values so the popup can diff them against fresh DB data
     const snapshot: Record<string, string | number | undefined | null> = {
       bookingId: booking.bookingId,
+      piLink: booking.piLink,
       guestId: booking.guestId,
       editId: booking.editID,
       bookingTakenBy: booking.bookingTakenBy ?? booking.assignedTo,
@@ -4065,6 +4127,10 @@ export default function SalesAccountsTeamPage() {
           const checkoutBooking = bookings.find((b) => b.id === bookingId)
           if (checkoutBooking) {
             setSelectedBookingForCheckout(checkoutBooking)
+            setCheckoutVerifyData({
+              paymentReceivedStatus: checkoutBooking.checkOutPersonStage?.["1"]?.status || "",
+              remarks: checkoutBooking.checkOutPersonStage?.["1"]?.remarks || "",
+            })
             setShowCheckoutVerifyModal(true)
           }
           break
@@ -10816,7 +10882,7 @@ export default function SalesAccountsTeamPage() {
                           {/* CURRENCY */}
                           <Select
                             disabled={isSubmitting} // 🔒 submit ke time disable
-                            value={selectedBookingForPayment.currency}
+                            value={paymentData.currency}
                             onValueChange={(value) =>
                               setPaymentData({ ...paymentData, currency: value })
                             }
@@ -11037,7 +11103,7 @@ export default function SalesAccountsTeamPage() {
                       </Select>
                     </div> */}
 
-                    {/* PENDING AMOUNT */}
+                     {/* PENDING AMOUNT */}
                     <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
                       <Label className="text-slate-600 text-xs uppercase tracking-wide">
                         Pending Amount
@@ -11045,11 +11111,30 @@ export default function SalesAccountsTeamPage() {
                       <p className="text-lg font-semibold text-red-700">
                         {getCurrencySymbol(String(selectedBookingForPayment.currency).slice(0, 3))}{" "}
                         {selectedBookingForPayment
-                          ? (
-                            selectedBookingForPayment.originalAmount -
-                            getTotalReceivedRaw(selectedBookingForPayment) -
-                            (Number.parseFloat(paymentData.receivedAmount) || 0)
-                          ).toLocaleString()
+                          ? (() => {
+                              const originalAmt = selectedBookingForPayment.originalAmount;
+                              const receivedAmt = getTotalReceivedRaw(selectedBookingForPayment);
+                              
+                              // Current input currency and rate
+                              const cur = String(paymentData.currency || "INR").toUpperCase();
+                              const inputRate = cur === "USD" ? 85.74 : (cur === "EURO" || cur === "EUR" ? 89.26 : 1);
+                              
+                              // Booking original currency and rate
+                              const bookingCur = String(selectedBookingForPayment.currency || "INR").toUpperCase();
+                              const bookingRate = bookingCur === "USD" ? 85.74 : (bookingCur === "EURO" || bookingCur === "EUR" ? 89.26 : 1);
+                              
+                              // Calculate remaining pending in INR
+                              const pendingInINR = originalAmt - receivedAmt;
+                              const inputtedInINR = (parseFloat(paymentData.receivedAmount) || 0) * inputRate;
+                              const remainingInINR = Math.max(0, pendingInINR - inputtedInINR);
+                              
+                              // Display in booking's original currency
+                              const remainingInBookingCurrency = remainingInINR / bookingRate;
+                              return remainingInBookingCurrency.toLocaleString(undefined, {
+                                minimumFractionDigits: 0,
+                                maximumFractionDigits: 2
+                              });
+                            })()
                           : 0}
                       </p>
                     </div>
@@ -12698,6 +12783,21 @@ export default function SalesAccountsTeamPage() {
                   </h3>
                 </div>
 
+                {/* Show completed stage info banner */}
+                {selectedBookingForCheckout?.checkOutPersonStage?.["1"]?.actual && (
+                  <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg">
+                    <p className="text-xs text-green-800 flex items-center gap-2">
+                      <Info className="h-4 w-4 flex-shrink-0" />
+                      <span>
+                        This stage was completed on{' '}
+                        <strong>{formatSafeDateString(selectedBookingForCheckout.checkOutPersonStage["1"].actual, true)}</strong>
+                        {selectedBookingForCheckout.checkOutPersonStage["1"].doer && ` by ${selectedBookingForCheckout.checkOutPersonStage["1"].doer}`}.
+                        The form below shows the submitted data (read-only).
+                      </span>
+                    </p>
+                  </div>
+                )}
+
                 {/* Inputs Section */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 
@@ -12708,7 +12808,7 @@ export default function SalesAccountsTeamPage() {
                     </Label>
 
                     <Select
-                      disabled={isSubmitting}   // 🔒 submit ke time disable
+                      disabled={isSubmitting || !!selectedBookingForCheckout?.checkOutPersonStage?.["1"]?.actual}   // 🔒 submit/completed ke time disable
                       value={checkoutVerifyData.paymentReceivedStatus}
                       onValueChange={(value) =>
                         setCheckoutVerifyData({
@@ -12721,25 +12821,20 @@ export default function SalesAccountsTeamPage() {
                         className={`
       rounded-md border border-green-300 bg-white shadow-sm
       hover:border-green-400 focus:ring-2 focus:ring-green-400 transition-all
-      ${isSubmitting ? "cursor-not-allowed opacity-70" : ""}
+      ${(isSubmitting || !!selectedBookingForCheckout?.checkOutPersonStage?.["1"]?.actual) ? "cursor-not-allowed opacity-70" : ""}
     `}
                       >
                         <SelectValue placeholder="Select status" />
                       </SelectTrigger>
 
                       <SelectContent>
-                        <SelectItem value="Done">
-                          Done
-                        </SelectItem>
-                        {/* <SelectItem value="partial_payment_received">
-                          Partial Payment Received
-                        </SelectItem>
-                        <SelectItem value="booking_cancelled">
-                          Booking Cancelled
-                        </SelectItem>
-                        <SelectItem value="payment_pending">
-                          Payment Pending
-                        </SelectItem> */}
+                        <SelectItem value="Done">Done</SelectItem>
+                        <SelectItem value="Payment Received">Payment Received</SelectItem>
+                        <SelectItem value="Payment Not Received But Approval Taken">Payment Not Received But Approval Taken</SelectItem>
+                        <SelectItem value="Booking Cancelled">Booking Cancelled</SelectItem>
+                        <SelectItem value="Payment Not Received">Payment Not Received</SelectItem>
+                        <SelectItem value="Complimentary">Complimentary</SelectItem>
+                        <SelectItem value="Voucher">Voucher</SelectItem>
                       </SelectContent>
                     </Select>
 
@@ -12752,9 +12847,9 @@ export default function SalesAccountsTeamPage() {
                   <Label className="text-xs font-medium text-green-700">Remarks <span className="text-red-500">*</span></Label>
 
                   <Textarea
-                    disabled={isSubmitting}
+                    disabled={isSubmitting || !!selectedBookingForCheckout?.checkOutPersonStage?.["1"]?.actual}
                     placeholder="Enter any additional remarks..."
-                    className="rounded-md border border-green-300 bg-white shadow-sm hover:border-green-400 focus:ring-2 focus:ring-green-400 transition-all"
+                    className={`rounded-md border border-green-300 bg-white shadow-sm hover:border-green-400 focus:ring-2 focus:ring-green-400 transition-all ${(isSubmitting || !!selectedBookingForCheckout?.checkOutPersonStage?.["1"]?.actual) ? "cursor-not-allowed opacity-75 bg-gray-50" : ""}`}
                     value={checkoutVerifyData.remarks}
                     onChange={(e) =>
                       setCheckoutVerifyData({ ...checkoutVerifyData, remarks: e.target.value })
@@ -12797,31 +12892,43 @@ export default function SalesAccountsTeamPage() {
                 Cancel
               </Button>
 
+              {/* Stage Completion Status */}
+              {selectedBookingForCheckout?.checkOutPersonStage?.["1"]?.actual && (
+                <div className="flex items-center gap-2 text-sm text-green-700 bg-green-50 px-3 py-2 rounded border border-green-200">
+                  <CheckCircle className="h-4 w-4" />
+                  Checkout Completed
+                  {selectedBookingForCheckout.checkOutPersonStage["1"].actual && (
+                    <span className="text-xs text-green-600 ml-2">
+                      ({formatSafeDateString(selectedBookingForCheckout.checkOutPersonStage["1"].actual, true)})
+                    </span>
+                  )}
+                </div>
+              )}
 
-              <Button
-                onClick={handleCheckoutVerifySubmit}
-                disabled={
-                  isSubmitting ||
-                  !checkoutVerifyData.paymentReceivedStatus ||
-                  !checkoutVerifyData.remarks ||
-                  checkoutVerifyData.remarks.trim() === ""
-                }
-                className={`flex items-center gap-2 ${isSubmitting || !checkoutVerifyData.paymentReceivedStatus || !checkoutVerifyData.remarks || checkoutVerifyData.remarks.trim() === ""
-                  ? "cursor-not-allowed opacity-70"
-                  : "cursor-pointer !bg-green-600 hover:!bg-green-700 !text-white"
-                  }`}
-              >
-                {isSubmitting ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    Submitting...
-                  </>
-                ) : (
-                  "Submit"
-                )}
-              </Button>
-
-
+              {!selectedBookingForCheckout?.checkOutPersonStage?.["1"]?.actual && (
+                <Button
+                  onClick={handleCheckoutVerifySubmit}
+                  disabled={
+                    isSubmitting ||
+                    !checkoutVerifyData.paymentReceivedStatus ||
+                    !checkoutVerifyData.remarks ||
+                    checkoutVerifyData.remarks.trim() === ""
+                  }
+                  className={`flex items-center gap-2 ${isSubmitting || !checkoutVerifyData.paymentReceivedStatus || !checkoutVerifyData.remarks || checkoutVerifyData.remarks.trim() === ""
+                    ? "cursor-not-allowed opacity-70"
+                    : "cursor-pointer !bg-green-600 hover:!bg-green-700 !text-white"
+                    }`}
+                >
+                  {isSubmitting ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Submitting...
+                    </>
+                  ) : (
+                    "Submit"
+                  )}
+                </Button>
+              )}
             </DialogFooter>
 
           </DialogContent>
@@ -12837,7 +12944,8 @@ export default function SalesAccountsTeamPage() {
         >
           <DialogContent
             className="
-          max-w-2xl
+          max-w-[calc(100vw-1rem)]
+          sm:max-w-5xl
           max-h-[90vh]
           overflow-y-auto
           rounded-2xl
@@ -12861,9 +12969,9 @@ export default function SalesAccountsTeamPage() {
               </h3>
 
               {/* ================= GRID ================= */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
-                <div className="md:col-span-2 rounded-xl border border-slate-200 bg-gradient-to-br from-white to-slate-50 shadow-md overflow-hidden">
+                <div className="lg:col-span-1 rounded-xl border border-slate-200 bg-gradient-to-br from-white to-slate-50 shadow-md overflow-hidden">
                   {/* Header */}
                   <div className="flex items-center gap-2 px-5 py-3.5 bg-gradient-to-r from-indigo-600 to-indigo-500">
                     <FileText className="h-5 w-5 text-white" />
@@ -12873,7 +12981,7 @@ export default function SalesAccountsTeamPage() {
                   </div>
 
                   {/* Content */}
-                  <div className="p-6 grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-5">
+                  <div className="p-6 grid grid-cols-2 gap-x-6 gap-y-5">
 
                     {/* Customer */}
                     <div className="space-y-1">
@@ -12952,7 +13060,7 @@ export default function SalesAccountsTeamPage() {
                 </div>
 
                 {/* ============ HIGHLIGHTED ACTION SECTION ============ */}
-                <div className="md:col-span-2">
+                <div className="lg:col-span-1">
                   <div
                     className="
                   p-4
@@ -13546,7 +13654,7 @@ export default function SalesAccountsTeamPage() {
                       <div className="grid grid-cols-2">
                         <span className="text-gray-600">Pending Amount:</span>
                         <span className="font-medium">
-                          {getCurrencySymbol(String(viewBookingData?.currency).slice(0, 3))}{Number(viewBookingData?.pendingAmount || 0).toLocaleString()}
+                          {getCurrencySymbol(String(viewBookingData?.currency).slice(0, 3))}{Math.max(0, Number(viewBookingData?.originalAmount || 0) - Number(viewBookingData?.amountRecieved || viewBookingData?.receivedAmount || viewBookingData?.totalAmountReceived || 0)).toLocaleString()}
                         </span>
                       </div>
 

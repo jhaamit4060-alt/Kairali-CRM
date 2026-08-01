@@ -3,6 +3,7 @@ import React, { useState, useEffect } from "react";
 const API_BASE = "https://script.google.com/macros/s/AKfycbwTbyuZ0czgJTMlo-UJPfd5ZaCEK-_aI5gCcl4q75k7YhQ3T3Q-fD3NRuxMC9cFqVNU/exec";
 
 interface BookingDetail {
+    piLink?: string;
     timestamp: string;
     bookingDateTime: string;
     bookingId: string;
@@ -591,6 +592,30 @@ const BookingDetailPopup: React.FC<BookingDetailPopupProps> = ({
                         </div>
                     </div>
                     <div style={styles.headerRight}>
+                        {(data.piLink || tableRowData?.piLink) && (
+                            <a
+                                href={String(data.piLink || tableRowData?.piLink)}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                style={{
+                                    fontSize: "11px",
+                                    fontWeight: 500,
+                                    padding: "3px 12px",
+                                    borderRadius: "20px",
+                                    background: "#3b82f6",
+                                    color: "#ffffff",
+                                    border: "0.5px solid #2563eb",
+                                    whiteSpace: "nowrap",
+                                    textDecoration: "none",
+                                    display: "inline-flex",
+                                    alignItems: "center",
+                                    gap: "4px",
+                                    cursor: "pointer"
+                                }}
+                            >
+                                📄 View PI
+                            </a>
+                        )}
                         <span style={styles.badgeConfirmed}>{data.bookingStatus}</span>
                         <span style={styles.badgeStatus}>{data.guestStatus}</span>
                         {changedCount > 0 && (
