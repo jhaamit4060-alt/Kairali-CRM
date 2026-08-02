@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from "react";
 import { Repeat, X, Upload, Check, Send } from "lucide-react";
+import { compressImage } from "../lib/image-compress";
 import { useAuth } from "@/hooks/use-auth";
 
 const DOCTORS = ["Dr Deepu John", "Dr. Rahul R", "Ashika Raj", "Dr. Akhila Oommen"];
@@ -212,11 +213,11 @@ export default function ArrivalTicketsModal({ open = true, booking = null as any
         try {
             const checkinDate = new Date(booking.checkIn);
             if (isNaN(checkinDate.getTime())) return false;
-            
+
             const today = new Date();
             today.setHours(0, 0, 0, 0);
             checkinDate.setHours(0, 0, 0, 0);
-            
+
             return today > checkinDate;
         } catch (e) {
             return false;
@@ -227,10 +228,11 @@ export default function ArrivalTicketsModal({ open = true, booking = null as any
 
     const stage = guestTrackerData?.arrivalstage;
     const isAlreadySubmitted = isLocked ||
-                               stage?.client_arrival_data_upload_status === "Pickup Required" ||
-                               stage?.client_arrival_data_upload_status === "Not Required" ||
-                               stage?.client_arrival_data_upload_status === "Completed" ||
-                               !!stage?.arrival_actual;
+        stage?.client_arrival_data_upload_status === "Pickup Required" ||
+        stage?.client_arrival_data_upload_status === "Not Required" ||
+        stage?.client_arrival_data_upload_status === "Completed" ||
+        !!stage?.arrival_tickets_upload_link ||
+        !!stage?.arrival_actual;
 
     const [pickupRequired, setPickupRequired] = useState(() => {
         if (stage?.client_arrival_data_upload_status === "Pickup Required" || stage?.arrival_tickets_upload_link) return "yes";
@@ -251,6 +253,21 @@ export default function ArrivalTicketsModal({ open = true, booking = null as any
     const [boardingRemarks, setBoardingRemarks] = useState("");
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [submitError, setSubmitError] = useState<string | null>(null);
+
+    React.useEffect(() => {
+        if (stage) {
+            if (stage.client_arrival_data_upload_status === "Pickup Required" || stage.arrival_tickets_upload_link) {
+                setPickupRequired("yes");
+            } else if (stage.client_arrival_data_upload_status === "Not Required") {
+                setPickupRequired("no");
+            } else {
+                setPickupRequired("");
+            }
+            setUploadRemarks(stage.client_arrival_data_upload_remarks || "");
+            const doc = stage.confirm_guest_requests_doctor || "";
+            setAssignedDoctor(doc.startsWith("http") ? "" : doc);
+        }
+    }, [stage]);
 
     if (!open) return null;
 
@@ -487,149 +504,149 @@ export default function ArrivalTicketsModal({ open = true, booking = null as any
                     )}
 
                     <>
-                            {/* Section 1: Pickup */}
-                            <SectionWrapper theme={SECTION_THEMES.pickup}>
-                                <SectionHeader title="Pickup Details" color={SECTION_THEMES.pickup.head} />
-                                <div style={{ marginBottom: pickupRequired === "yes" ? 16 : 0 }}>
-                                    <Label>Pickup Required?</Label>
-                                    <select style={selectStyle} disabled={isAlreadySubmitted} value={pickupRequired} onChange={(e) => setPickupRequired(e.target.value)}>
+                        {/* Section 1: Pickup */}
+                        <SectionWrapper theme={SECTION_THEMES.pickup}>
+                            <SectionHeader title="Pickup Details" color={SECTION_THEMES.pickup.head} />
+                            <div style={{ marginBottom: pickupRequired === "yes" ? 16 : 0 }}>
+                                <Label>Pickup Required?</Label>
+                                <select style={selectStyle} disabled={isAlreadySubmitted} value={pickupRequired} onChange={(e) => setPickupRequired(e.target.value)}>
+                                    <option value="">Select an option</option>
+                                    <option value="yes">Yes</option>
+                                    <option value="no">No</option>
+                                </select>
+                            </div>
+
+                            {pickupRequired === "yes" && (
+                                <>
+                                    <div style={{ ...row2, marginBottom: 16 }}>
+                                        <div>
+                                            <Label>Arrival Tickets</Label>
+                                            {isAlreadySubmitted ? (
+                                                stage?.arrival_tickets_upload_link ? (
+                                                    <div style={readonlyBoxStyle}>
+                                                        <a href={stage.arrival_tickets_upload_link} target="_blank" rel="noopener noreferrer" style={{ color: "#6259d6", fontWeight: 600, textDecoration: "underline" }}>
+                                                            ↗ View Ticket
+                                                        </a>
+                                                    </div>
+                                                ) : (
+                                                    <div style={readonlyBoxStyle}>No Ticket Uploaded</div>
+                                                )
+                                            ) : (
+                                                <UploadBox id="arrival-ticket-upload" file={arrivalTicketFile} onChange={setArrivalTicketFile} />
+                                            )}
+                                        </div>
+                                        <div>
+                                            <Label>Uploaded By</Label>
+                                            <div style={readonlyBoxStyle}>{stage?.arrival_doer_name || currentUser}</div>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <Label>Upload Remarks</Label>
+                                        <textarea
+                                            style={textareaStyle}
+                                            disabled={isAlreadySubmitted}
+                                            placeholder={isAlreadySubmitted ? "—" : "Enter remarks..."}
+                                            value={uploadRemarks}
+                                            onChange={(e) => setUploadRemarks(e.target.value)}
+                                        />
+                                    </div>
+                                </>
+                            )}
+
+                            {pickupRequired === "no" && (
+                                <div
+                                    style={{
+                                        marginTop: 12,
+                                        display: "flex",
+                                        alignItems: "center",
+                                        gap: 8,
+                                        fontSize: 13,
+                                        color: "#6b7280",
+                                        background: "#e5e7eb",
+                                        borderRadius: 10,
+                                        padding: "10px 12px",
+                                    }}
+                                >
+                                    <Check size={14} color="#16a34a" />
+                                    Pickup not required — saved to the booking record.
+                                </div>
+                            )}
+                        </SectionWrapper>
+
+                        {/* Section 2: Guest Requests & Doctor */}
+                        <SectionWrapper theme={SECTION_THEMES.guest}>
+                            <SectionHeader title="Confirm Guest Requests & Doctor" color={SECTION_THEMES.guest.head} />
+                            <div style={{ ...row2, marginBottom: 16 }}>
+                                <div>
+                                    <Label>Please Assign Doctor</Label>
+                                    <select style={selectStyle} disabled={isAlreadySubmitted} value={assignedDoctor} onChange={(e) => setAssignedDoctor(e.target.value)}>
+                                        <option value="">Select doctor</option>
+                                        {DOCTORS.map((doc) => (
+                                            <option key={doc} value={doc}>
+                                                {doc}
+                                            </option>
+                                        ))}
+                                        {isAlreadySubmitted && assignedDoctor && !DOCTORS.includes(assignedDoctor) && (
+                                            <option value={assignedDoctor}>{assignedDoctor}</option>
+                                        )}
+                                    </select>
+                                </div>
+                                <div>
+                                    <Label>Wheel Chair Requirement?</Label>
+                                    <select style={selectStyle} disabled={isAlreadySubmitted} value={wheelchair} onChange={(e) => setWheelchair(e.target.value)}>
                                         <option value="">Select an option</option>
                                         <option value="yes">Yes</option>
                                         <option value="no">No</option>
                                     </select>
                                 </div>
+                            </div>
+                            <div>
+                                <Label>Any other special request/requirement by Guest?</Label>
+                                <textarea
+                                    style={textareaStyle}
+                                    disabled={isAlreadySubmitted}
+                                    placeholder={isAlreadySubmitted ? "—" : "Enter special request..."}
+                                    value={specialRequest}
+                                    onChange={(e) => setSpecialRequest(e.target.value)}
+                                />
+                            </div>
+                        </SectionWrapper>
 
-                                {pickupRequired === "yes" && (
-                                    <>
-                                        <div style={{ ...row2, marginBottom: 16 }}>
-                                            <div>
-                                                <Label>Arrival Tickets</Label>
-                                                {isAlreadySubmitted ? (
-                                                    stage?.arrival_tickets_upload_link ? (
-                                                        <div style={readonlyBoxStyle}>
-                                                            <a href={stage.arrival_tickets_upload_link} target="_blank" rel="noopener noreferrer" style={{ color: "#6259d6", fontWeight: 600, textDecoration: "underline" }}>
-                                                                ↗ View Ticket
-                                                            </a>
-                                                        </div>
-                                                    ) : (
-                                                        <div style={readonlyBoxStyle}>No Ticket Uploaded</div>
-                                                    )
-                                                ) : (
-                                                    <UploadBox id="arrival-ticket-upload" file={arrivalTicketFile} onChange={setArrivalTicketFile} />
-                                                )}
-                                            </div>
-                                            <div>
-                                                <Label>Uploaded By</Label>
-                                                <div style={readonlyBoxStyle}>{stage?.arrival_doer_name || currentUser}</div>
-                                            </div>
-                                        </div>
-                                        <div>
-                                            <Label>Upload Remarks</Label>
-                                            <textarea
-                                                style={textareaStyle}
-                                                disabled={isAlreadySubmitted}
-                                                placeholder={isAlreadySubmitted ? "—" : "Enter remarks..."}
-                                                value={uploadRemarks}
-                                                onChange={(e) => setUploadRemarks(e.target.value)}
-                                            />
-                                        </div>
-                                    </>
-                                )}
-
-                                {pickupRequired === "no" && (
-                                    <div
-                                        style={{
-                                            marginTop: 12,
-                                            display: "flex",
-                                            alignItems: "center",
-                                            gap: 8,
-                                            fontSize: 13,
-                                            color: "#6b7280",
-                                            background: "#e5e7eb",
-                                            borderRadius: 10,
-                                            padding: "10px 12px",
-                                        }}
-                                    >
-                                        <Check size={14} color="#16a34a" />
-                                        Pickup not required — saved to the booking record.
-                                    </div>
-                                )}
-                            </SectionWrapper>
-
-                            {/* Section 2: Guest Requests & Doctor */}
-                            <SectionWrapper theme={SECTION_THEMES.guest}>
-                                <SectionHeader title="Confirm Guest Requests & Doctor" color={SECTION_THEMES.guest.head} />
-                                <div style={{ ...row2, marginBottom: 16 }}>
+                        {/* Section 3: Boarding Pass - only relevant when pickup is required */}
+                        {pickupRequired === "yes" && (
+                            <SectionWrapper theme={SECTION_THEMES.boarding}>
+                                <SectionHeader title="Boarding Pass" color={SECTION_THEMES.boarding.head} />
+                                <div style={row2}>
                                     <div>
-                                        <Label>Please Assign Doctor</Label>
-                                        <select style={selectStyle} disabled={isAlreadySubmitted} value={assignedDoctor} onChange={(e) => setAssignedDoctor(e.target.value)}>
-                                            <option value="">Select doctor</option>
-                                            {DOCTORS.map((doc) => (
-                                                <option key={doc} value={doc}>
-                                                    {doc}
-                                                </option>
-                                            ))}
-                                            {isAlreadySubmitted && assignedDoctor && !DOCTORS.includes(assignedDoctor) && (
-                                                <option value={assignedDoctor}>{assignedDoctor}</option>
-                                            )}
-                                        </select>
-                                    </div>
-                                    <div>
-                                        <Label>Wheel Chair Requirement?</Label>
-                                        <select style={selectStyle} disabled={isAlreadySubmitted} value={wheelchair} onChange={(e) => setWheelchair(e.target.value)}>
-                                            <option value="">Select an option</option>
-                                            <option value="yes">Yes</option>
-                                            <option value="no">No</option>
-                                        </select>
-                                    </div>
-                                </div>
-                                <div>
-                                    <Label>Any other special request/requirement by Guest?</Label>
-                                    <textarea
-                                        style={textareaStyle}
-                                        disabled={isAlreadySubmitted}
-                                        placeholder={isAlreadySubmitted ? "—" : "Enter special request..."}
-                                        value={specialRequest}
-                                        onChange={(e) => setSpecialRequest(e.target.value)}
-                                    />
-                                </div>
-                            </SectionWrapper>
-
-                            {/* Section 3: Boarding Pass - only relevant when pickup is required */}
-                            {pickupRequired === "yes" && (
-                                <SectionWrapper theme={SECTION_THEMES.boarding}>
-                                    <SectionHeader title="Boarding Pass" color={SECTION_THEMES.boarding.head} />
-                                    <div style={row2}>
-                                        <div>
-                                            <Label>Boarding Pass</Label>
-                                            {isAlreadySubmitted ? (
-                                                stage?.arrival_boarding_pass_upload_link ? (
-                                                    <div style={readonlyBoxStyle}>
-                                                        <a href={stage.arrival_boarding_pass_upload_link} target="_blank" rel="noopener noreferrer" style={{ color: "#6259d6", fontWeight: 600, textDecoration: "underline" }}>
-                                                            ↗ View Boarding Pass
-                                                        </a>
-                                                    </div>
-                                                ) : (
-                                                    <div style={readonlyBoxStyle}>No Boarding Pass Uploaded</div>
-                                                )
+                                        <Label>Boarding Pass</Label>
+                                        {isAlreadySubmitted ? (
+                                            stage?.arrival_boarding_pass_upload_link ? (
+                                                <div style={readonlyBoxStyle}>
+                                                    <a href={stage.arrival_boarding_pass_upload_link} target="_blank" rel="noopener noreferrer" style={{ color: "#6259d6", fontWeight: 600, textDecoration: "underline" }}>
+                                                        ↗ View Boarding Pass
+                                                    </a>
+                                                </div>
                                             ) : (
-                                                <UploadBox id="boarding-pass-upload" file={boardingPassFile} onChange={setBoardingPassFile} />
-                                            )}
-                                        </div>
-                                        <div>
-                                            <Label>Upload Remarks</Label>
-                                            <textarea
-                                                style={{ ...textareaStyle, minHeight: 42 }}
-                                                disabled={isAlreadySubmitted}
-                                                placeholder={isAlreadySubmitted ? "—" : "Enter remarks..."}
-                                                value={boardingRemarks}
-                                                onChange={(e) => setBoardingRemarks(e.target.value)}
-                                            />
-                                        </div>
+                                                <div style={readonlyBoxStyle}>No Boarding Pass Uploaded</div>
+                                            )
+                                        ) : (
+                                            <UploadBox id="boarding-pass-upload" file={boardingPassFile} onChange={setBoardingPassFile} />
+                                        )}
                                     </div>
-                                </SectionWrapper>
-                            )}
-                        </>
+                                    <div>
+                                        <Label>Upload Remarks</Label>
+                                        <textarea
+                                            style={{ ...textareaStyle, minHeight: 42 }}
+                                            disabled={isAlreadySubmitted}
+                                            placeholder={isAlreadySubmitted ? "—" : "Enter remarks..."}
+                                            value={boardingRemarks}
+                                            onChange={(e) => setBoardingRemarks(e.target.value)}
+                                        />
+                                    </div>
+                                </div>
+                            </SectionWrapper>
+                        )}
+                    </>
 
                     {/* Footer */}
                     <div style={{ display: "flex", gap: 12, flexDirection: "column" }}>

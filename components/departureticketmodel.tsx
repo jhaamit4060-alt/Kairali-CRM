@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from "react";
 import { Repeat, X, Upload, Check, Send } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
+import { compressImage } from "../lib/image-compress";
 
 /** Format a raw date string (ISO or DD/MM/YYYY) into a readable form like "05 November 2026" */
 function formatDate(raw?: string): string {
@@ -227,6 +228,7 @@ export default function DepartureFlightModal({ open = true, booking = null as an
                                stage?.client_departure_data_upload_status === "Drop Required" ||
                                stage?.client_departure_data_upload_status === "Not Required" ||
                                stage?.client_departure_data_upload_status === "Completed" ||
+                               !!stage?.departure_tickets_upload_link ||
                                !!stage?.departure_actual;
 
     const [dropRequired, setDropRequired] = useState(() => {
@@ -241,6 +243,19 @@ export default function DepartureFlightModal({ open = true, booking = null as an
     const [boardingRemarks, setBoardingRemarks] = useState("");
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [submitError, setSubmitError] = useState<string | null>(null);
+
+    React.useEffect(() => {
+        if (stage) {
+            if (stage.client_departure_data_upload_status === "Drop Required" || stage.departure_tickets_upload_link) {
+                setDropRequired("yes");
+            } else if (stage.client_departure_data_upload_status === "Not Required") {
+                setDropRequired("no");
+            } else {
+                setDropRequired("");
+            }
+            setUploadRemarks(stage.client_departure_data_upload_remarks || "");
+        }
+    }, [stage]);
 
     if (!open) return null;
 
@@ -290,10 +305,16 @@ export default function DepartureFlightModal({ open = true, booking = null as an
                 payload.ticketremarks = uploadRemarks;
                 payload.boardinguploadremarks = boardingRemarks;
                 if (departureTicketFile) {
-                    payload.ticketscreenshot = await toBase64(departureTicketFile);
+                    console.log(`[Departure] Ticket original size: ${departureTicketFile.size} bytes`);
+                    const compressedTicket = await compressImage(departureTicketFile);
+                    console.log(`[Departure] Ticket compressed size: ${compressedTicket.size} bytes`);
+                    payload.ticketscreenshot = await toBase64(compressedTicket);
                 }
                 if (boardingPassFile) {
-                    payload.boardingpassscreenshot = await toBase64(boardingPassFile);
+                    console.log(`[Departure] Boarding pass original size: ${boardingPassFile.size} bytes`);
+                    const compressedBoarding = await compressImage(boardingPassFile);
+                    console.log(`[Departure] Boarding pass compressed size: ${compressedBoarding.size} bytes`);
+                    payload.boardingpassscreenshot = await toBase64(compressedBoarding);
                 }
             }
 
