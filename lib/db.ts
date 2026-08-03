@@ -38,6 +38,7 @@ const DB_CONFIG = {
   waitForConnections: true,
   connectionLimit: 10,
   connectTimeout: 30000,
+  timezone: '+05:30',
 }
 
 
