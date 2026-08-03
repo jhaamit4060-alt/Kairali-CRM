@@ -114,10 +114,10 @@ export async function GET(req: NextRequest) {
             data: rows.map((row: any, i: number) => mapRow(row, i)),
         })
 
-    } catch (error: any) {
-        console.error('[account-tracker API] Error:', error)
+    } catch {
+        console.error('[account-tracker API] request failed')
         return NextResponse.json(
-            { success: false, error: error.message || 'Failed to fetch account tracker data' },
+            { success: false, error: 'Failed to fetch account tracker data' },
             { status: 500 }
         )
     }

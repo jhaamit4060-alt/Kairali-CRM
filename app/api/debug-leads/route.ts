@@ -1,7 +1,40 @@
+// app/api/debug-leads/route.ts
+// ─────────────────────────────────────────────────────────────
+// LEAD DEDUPLICATION DIAGNOSTIC — admin only.
+// Middleware proves there is a signed CRM session; this diagnostic still does
+// its own admin-role check before it ever opens the pool.
+// ─────────────────────────────────────────────────────────────
+
 import { NextRequest, NextResponse } from 'next/server'
 import { getPool } from '@/lib/db'
+import { getSessionUser, hasAdminRole } from '@/lib/authz'
+
+// Diagnostic output is per-session; never let it sit in a shared cache.
+const noStoreHeaders = { 'Cache-Control': 'private, no-store' }
 
 export async function GET(req: NextRequest) {
+    // Rejects missing, tampered, forged, and expired cookies. `getSessionUser` reads
+    // the same `kairali_user` cookie and defers to the same `verifySessionCookieValue`
+    // this route called inline before — same inputs, same null cases, same result.
+    const user = getSessionUser(req)
+    if (!user) {
+        return NextResponse.json(
+            { success: false, error: 'Unauthorized' },
+            { status: 401, headers: noStoreHeaders }
+        )
+    }
+
+    // Same rule and same coercion as `app/api/test-db/route.ts`:
+    // `String(user?.role ?? '').trim().toLowerCase()` against `super_admin`/`admin`,
+    // reproduced exactly by the shared predicate rather than by the folding
+    // `normalizeRole`. Same accepts, same rejects (matrix M9; folding is D1).
+    if (!hasAdminRole(user, 'trimmed-lower')) {
+        return NextResponse.json(
+            { success: false, error: 'Forbidden' },
+            { status: 403, headers: noStoreHeaders }
+        )
+    }
+
     try {
         const pool = await getPool()
 
@@ -57,11 +90,14 @@ export async function GET(req: NextRequest) {
               bad_leads_filtered_out: badCount,
             },
             summary: `Fixed: Removed ${badCount} bad records, reduced from ${totalRowsRaw} to ${fixedCount} leads`
-        })
+        }, { headers: noStoreHeaders })
 
-    } catch (err: unknown) {
-        const message = err instanceof Error ? err.message : 'Unknown error'
-        console.error('[Debug API Error]', message)
-        return NextResponse.json({ success: false, error: message }, { status: 500 })
+    } catch {
+        // Generic on both sides: the driver message can carry host, user, and SQL.
+        console.error('[debug-leads] diagnostic query failed')
+        return NextResponse.json(
+            { success: false, error: 'Internal server error' },
+            { status: 500, headers: noStoreHeaders }
+        )
     }
 }

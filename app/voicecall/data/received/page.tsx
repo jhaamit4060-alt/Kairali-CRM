@@ -1697,12 +1697,12 @@ function ReceivedDataPageInner() {
 
     const tableRef = useRef<HTMLDivElement>(null);
 
-    const [searchInput, setSearchInput] = useState("");
-    const [searchQuery, setSearchQuery] = useState("");
-
-    const handleSearch = () => {
-        setSearchQuery(searchInput);
-    };
+    const [search, setSearch] = useState("");
+    const [debouncedSearch, setDebouncedSearch] = useState("");
+    useEffect(() => {
+        const h = setTimeout(() => setDebouncedSearch(search), 300);
+        return () => clearTimeout(h);
+    }, [search]);
 
     const [dateFilter, setDateFilter] = useState("this_week");
     const [company, setCompany] = useState("all");
@@ -1713,14 +1713,8 @@ function ReceivedDataPageInner() {
     const [customDate, setCustomDate] = useState({ start: "", end: "" });
 
     const clearFilters = () => {
-        setSearchInput("");
-        setSearchQuery("");
-        setDateFilter("all");
-        setCompany("all");
-        setDataSource("all");
-        setStatus("all");
-        setIntent("all");
-        setLeadStatus("all");
+        setSearch(""); setDateFilter("all"); setCompany("all");
+        setDataSource("all"); setStatus("all"); setIntent("all"); setLeadStatus("all");
         setCustomDate({ start: "", end: "" });
     };
 
@@ -1728,7 +1722,7 @@ function ReceivedDataPageInner() {
         if (tableRef.current) {
             tableRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
         }
-    }, [searchQuery, dateFilter, company, dataSource, status, intent, leadStatus]);
+    }, [search, dateFilter, company, dataSource, status, intent, leadStatus]);
 
     const dateWindow = useMemo(() => {
         if (dateFilter === "custom") return { from: customDate.start ? new Date(customDate.start) : null, to: customDate.end ? new Date(customDate.end + "T23:59:59") : null };
@@ -1796,7 +1790,7 @@ function ReceivedDataPageInner() {
 
     // ── Filtered Data ─────────────────────────────────────────────────────────
     const filteredReceived = useMemo(() => {
-        const q = searchQuery.trim().toLowerCase();
+        const q = debouncedSearch.trim().toLowerCase();
         return processedReceived.filter(r => {
             if (q && !(
                 r.clientName.toLowerCase().includes(q) ||
@@ -1825,7 +1819,7 @@ function ReceivedDataPageInner() {
             if (leadStatus !== "all" && r.leadstatus !== leadStatus) return false;
             return true;
         });
-    }, [searchQuery, dateWindow, company, dataSource, status, intent, leadStatus, processedReceived]);
+    }, [debouncedSearch, dateWindow, company, dataSource, status, intent, leadStatus, processedReceived]);
 
     const receivedCounts = useMemo(() => buildConsistentReceivedCounts(filteredReceived), [filteredReceived]);
 
@@ -1943,13 +1937,7 @@ function ReceivedDataPageInner() {
                         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-6 gap-3">
                             <div className="flex flex-col gap-1.5 sm:col-span-2 xl:col-span-2">
                                 <label className="text-xs font-medium uppercase tracking-wide text-slate-500">Search Leads</label>
-                                <Input
-                                    placeholder="Name, email, phone, ID, subject..."
-                                    value={searchInput}
-                                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchInput(e.target.value)}
-                                    onKeyDown={(e) => { if (e.key === "Enter") handleSearch(); }}
-                                    className="h-10 w-full rounded-md border-gray-300"
-                                />
+                                <Input placeholder="Name, email, phone, ID, subject..." value={search} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearch(e.target.value)} className="h-10 w-full rounded-md border-gray-300" />
                             </div>
                             <div className="flex flex-col gap-1.5">
                                 <label className="text-xs font-medium uppercase tracking-wide text-slate-500">Date Range</label>

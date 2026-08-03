@@ -33,6 +33,10 @@ function isAllowed(host: string) {
     return ALLOWED_HOSTS.some(rx => rx.test(host));
 }
 
+// Time budget for the upstream response headers. The body streams afterwards
+// without a timer, so a long recording isn't cut off mid-playback.
+const UPSTREAM_TIMEOUT_MS = 20_000;
+
 export async function GET(req: NextRequest) {
     const raw = req.nextUrl.searchParams.get("url")?.trim();
     if (!raw) {
@@ -53,6 +57,9 @@ export async function GET(req: NextRequest) {
         );
     }
 
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), UPSTREAM_TIMEOUT_MS);
+
     try {
         // Forward Range header so the audio element can seek
         const range = req.headers.get("range");
@@ -64,6 +71,7 @@ export async function GET(req: NextRequest) {
             },
             redirect: "follow",
             cache: "no-store",
+            signal: controller.signal,
         });
 
         if (!upstream.ok && upstream.status !== 206) {
@@ -99,7 +107,17 @@ export async function GET(req: NextRequest) {
             headers,
         });
     } catch (err) {
-        console.error("[recording-proxy]", err);
+        // Log the error class and host only — the full url can carry signed
+        // query tokens, and the raw error may echo them back in its message.
+        const kind = err instanceof Error ? err.name : "UnknownError";
+        const timedOut = kind === "AbortError" || kind === "TimeoutError";
+        console.error(
+            `[recording-proxy] upstream request ${timedOut ? "timed out" : "failed"} for ${target.hostname} (${kind})`,
+        );
         return NextResponse.json({ error: "Failed to fetch recording" }, { status: 502 });
+    } finally {
+        // Cleared as soon as the headers are in, so the timer can never abort
+        // the response body while it is still streaming to the player.
+        clearTimeout(timer);
     }
 }

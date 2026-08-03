@@ -322,7 +322,10 @@ function buildOtherCharges(d: any): ServiceCharge[] {
   // amount or the description/notes has been filled in.
   if (!amt && !desc && !notes) return [];
   const discType = d.otherAmountDiscountType || "%";
-  const discVal = parseFloat(d.otherAmountDiscount || "0") || 0;
+  const rawDiscVal = parseFloat(d.otherAmountDiscount || "0") || 0;
+  const discVal = discType === "%" || discType === "percentage"
+    ? Math.min(100, Math.max(0, rawDiscVal))
+    : Math.max(0, rawDiscVal);
   const after = discType === "cash"
     ? Math.max(0, amt - discVal)
     : Math.max(0, amt - (amt * discVal / 100));

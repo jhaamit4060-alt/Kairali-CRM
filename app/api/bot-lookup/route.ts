@@ -118,9 +118,9 @@ export async function GET(req: NextRequest) {
             ]
 
             return NextResponse.json({ source: 'search', results })
-        } catch (err: any) {
-            console.error('[bot-lookup search] error:', err)
-            return NextResponse.json({ source: 'search', error: 'Search failed', detail: err.message }, { status: 500 })
+        } catch {
+            console.error('[bot-lookup search] request failed')
+            return NextResponse.json({ source: 'search', error: 'Search failed' }, { status: 500 })
         }
     }
 
@@ -202,8 +202,8 @@ export async function GET(req: NextRequest) {
             default:
                 return NextResponse.json({ source: 'unknown', error: `Unrecognized ID format: "${id}"` }, { status: 404 })
         }
-    } catch (err: any) {
-        console.error('[bot-lookup] error:', err)
-        return NextResponse.json({ source, error: 'Lookup failed', detail: err.message }, { status: 500 })
+    } catch {
+        console.error('[bot-lookup] request failed')
+        return NextResponse.json({ source, error: 'Lookup failed' }, { status: 500 })
     }
 }

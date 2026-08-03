@@ -44,8 +44,8 @@ export async function GET(req: NextRequest) {
         }
 
         return NextResponse.json({ recentIds })
-    } catch (err: any) {
-        console.error('[bot-lookup/recent] error:', err)
-        return NextResponse.json({ error: 'Failed to fetch recent IDs', detail: err.message }, { status: 500 })
+    } catch {
+        console.error('[bot-lookup/recent] database query failed')
+        return NextResponse.json({ error: 'Failed to fetch recent IDs' }, { status: 500 })
     }
 }

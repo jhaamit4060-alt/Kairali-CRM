@@ -475,10 +475,10 @@ export async function GET(req: NextRequest) {
     } finally {
       connection.release()
     }
-  } catch (err: any) {
-    console.error('[API Stalled Deals Error]', err)
+  } catch {
+    console.error('[stalled-deals API] request failed')
     return NextResponse.json(
-      { success: false, error: err.message || 'Failed to fetch stalled deals' },
+      { success: false, error: 'Failed to fetch stalled deals' },
       { status: 500 }
     )
   }

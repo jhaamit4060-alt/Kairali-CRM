@@ -200,9 +200,9 @@ export default function ArrivalTicketsModal({ open = true, booking = null as any
         package: booking?.programmeName || "",
     };
 
-    // Gate: arrival_planned is no longer mandatory to open/fill the form
+    // Gate: the stage remains locked until arrival_planned is filled.
     const arrivalPlanned = guestTrackerData?.arrivalstage?.arrival_planned ?? "";
-    const isPlanned = true;
+    const isPlanned = typeof arrivalPlanned === "string" ? arrivalPlanned.trim() !== "" : !!arrivalPlanned;
 
     const existsInTracker = guestTrackerData?.exists ?? false;
 
@@ -224,7 +224,7 @@ export default function ArrivalTicketsModal({ open = true, booking = null as any
         }
     }, [booking?.checkIn, guestTrackerData?.arrivalstage?.arrival_actual]);
 
-    const isLocked = !existsInTracker || isLockedAfterCheckin;
+    const isLocked = !existsInTracker || !isPlanned || isLockedAfterCheckin;
 
     const stage = guestTrackerData?.arrivalstage;
     const isAlreadySubmitted = isLocked ||
@@ -503,6 +503,27 @@ export default function ArrivalTicketsModal({ open = true, booking = null as any
                         </div>
                     )}
 
+                    {existsInTracker && !isLockedAfterCheckin && !isPlanned && (
+                        <div
+                            style={{
+                                background: "#f8fafc",
+                                border: "1.5px solid #cbd5e1",
+                                borderRadius: 14,
+                                padding: "20px 24px",
+                                textAlign: "center",
+                                marginBottom: 20,
+                            }}
+                        >
+                            <div style={{ fontSize: 32, marginBottom: 8 }}>🔒</div>
+                            <p style={{ fontSize: 15, fontWeight: 700, color: "#334155", margin: "0 0 6px" }}>
+                                Arrival Flight Details Locked
+                            </p>
+                            <p style={{ fontSize: 13, color: "#475569", margin: 0, maxWidth: 640, marginInline: "auto" }}>
+                                This stage is locked until arrival planned is filled.
+                            </p>
+                        </div>
+                    )}
+
                     <>
                         {/* Section 1: Pickup */}
                         <SectionWrapper theme={SECTION_THEMES.pickup}>
@@ -733,7 +754,7 @@ export default function ArrivalTicketsModal({ open = true, booking = null as any
                                         cursor: "not-allowed",
                                     }}
                                 >
-                                    🔒 {!existsInTracker ? "Locked (Missing Tracker)" : isLockedAfterCheckin ? "Locked (Check-in Completed)" : "Submitted & Locked"}
+                                    🔒 {!existsInTracker ? "Locked (Missing Tracker)" : isLockedAfterCheckin ? "Locked (Check-in Completed)" : !isPlanned ? "Locked (Planned Missing)" : "Submitted & Locked"}
                                 </div>
                             )}
                         </div>

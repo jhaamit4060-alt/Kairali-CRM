@@ -39,7 +39,7 @@ function processDateTime(inputValue: string): string {
   if (!inputValue) return "";
   const [datePart, timePart] = inputValue.split("T");
   const now = new Date();
-  
+
   if (!timePart || timePart === "00:00") {
     const hours = String(now.getHours()).padStart(2, '0');
     const minutes = String(now.getMinutes()).padStart(2, '0');
@@ -146,6 +146,11 @@ function calculateDays(checkIn: string, checkOut: string) {
 
 function normalizeName(name?: string): string {
   return normalizeUserName(name);
+}
+
+function stageHasPlanned(stage?: { planned?: unknown } | null): boolean {
+  const planned = stage?.planned;
+  return typeof planned === "string" ? planned.trim() !== "" : !!planned;
 }
 
 function parseDDMMYYYYDate(dateStr: any): Date | null {
@@ -591,7 +596,7 @@ export default function SalesAccountsTeamPage() {
       if (Array.isArray(fetchedBookings)) {
         // Filter bookings based on user permissions
         const permissionFilteredBookings = fetchedBookings.filter(booking => canUserViewBooking(booking))
-        
+
         _setBookings(prevBookings => {
           return permissionFilteredBookings.map(fetched => {
             const local = prevBookings.find(b => b.bookingId === fetched.bookingId);
@@ -3975,12 +3980,12 @@ export default function SalesAccountsTeamPage() {
           setIsCancelled(false)
           setShowCancelModal(true)
           break
-          case "payment_upload":
-            const paymentBooking = bookings.find((b) => b.id === bookingId)
-            if (paymentBooking) {
-              setSelectedBookingForPayment(paymentBooking)
-              setPaymentData({
-                amount: (paymentBooking.originalAmount || paymentBooking.amount || 0).toString(),
+        case "payment_upload":
+          const paymentBooking = bookings.find((b) => b.id === bookingId)
+          if (paymentBooking) {
+            setSelectedBookingForPayment(paymentBooking)
+            setPaymentData({
+              amount: (paymentBooking.originalAmount || paymentBooking.amount || 0).toString(),
               receivedAmount: "",
               currency: "INR",
               paymentMode: "",
@@ -4182,56 +4187,56 @@ export default function SalesAccountsTeamPage() {
 
       // Update local state
       setBookings(prevBookings => prevBookings.map((b) =>
-        ((b.id === selectedBookingId || b.bookingId === selectedBookingForCancelledBookings?.bookingId)
-          ? {
-            ...b,
-            status: "cancelled" as const,
-            cancelByUserCheck: "Cancelled",
-            cancelledReason: cancelReason,
-            cancelledRemarks: cancelRemarks,
-            editActionStatus: "cancelled",
-            salesPersonStage: {
-              ...b.salesPersonStage,
-              "1": b.salesPersonStage?.["1"] ? {
-                ...b.salesPersonStage["1"],
-                status: "Cancelled",
-                actual: b.salesPersonStage["1"].actual || cancelledAt,
-                remarks: `${cancelReason} - ${cancelRemarks}`,
-                doer: cancelledBy,
-              } : b.salesPersonStage?.["1"],
-            },
-            accountsPersonStage: {
-              ...b.accountsPersonStage,
-              "1": b.accountsPersonStage?.["1"] ? {
-                ...b.accountsPersonStage["1"],
-                status: "Cancelled",
-                actual: b.accountsPersonStage["1"].actual || cancelledAt,
-                remarks: `${cancelReason} - ${cancelRemarks}`,
-                doer: cancelledBy,
-              } : b.accountsPersonStage?.["1"],
-            },
-            foPersonStage: {
-              ...b.foPersonStage,
-              "1": b.foPersonStage?.["1"] ? {
-                ...b.foPersonStage["1"],
-                status: "Cancelled",
-                actual: b.foPersonStage["1"].actual || cancelledAt,
-                remarks: `${cancelReason} - ${cancelRemarks}`,
-                doer: cancelledBy,
-              } : b.foPersonStage?.["1"],
-            },
-            checkOutPersonStage: {
-              ...b.checkOutPersonStage,
-              "1": b.checkOutPersonStage?.["1"] ? {
-                ...b.checkOutPersonStage["1"],
-                status: "Cancelled",
-                actual: b.checkOutPersonStage["1"].actual || cancelledAt,
-                remarks: `${cancelReason} - ${cancelRemarks}`,
-                doer: cancelledBy,
-              } : b.checkOutPersonStage?.["1"],
-            },
-          }
-          : b)
+      ((b.id === selectedBookingId || b.bookingId === selectedBookingForCancelledBookings?.bookingId)
+        ? {
+          ...b,
+          status: "cancelled" as const,
+          cancelByUserCheck: "Cancelled",
+          cancelledReason: cancelReason,
+          cancelledRemarks: cancelRemarks,
+          editActionStatus: "cancelled",
+          salesPersonStage: {
+            ...b.salesPersonStage,
+            "1": b.salesPersonStage?.["1"] ? {
+              ...b.salesPersonStage["1"],
+              status: "Cancelled",
+              actual: b.salesPersonStage["1"].actual || cancelledAt,
+              remarks: `${cancelReason} - ${cancelRemarks}`,
+              doer: cancelledBy,
+            } : b.salesPersonStage?.["1"],
+          },
+          accountsPersonStage: {
+            ...b.accountsPersonStage,
+            "1": b.accountsPersonStage?.["1"] ? {
+              ...b.accountsPersonStage["1"],
+              status: "Cancelled",
+              actual: b.accountsPersonStage["1"].actual || cancelledAt,
+              remarks: `${cancelReason} - ${cancelRemarks}`,
+              doer: cancelledBy,
+            } : b.accountsPersonStage?.["1"],
+          },
+          foPersonStage: {
+            ...b.foPersonStage,
+            "1": b.foPersonStage?.["1"] ? {
+              ...b.foPersonStage["1"],
+              status: "Cancelled",
+              actual: b.foPersonStage["1"].actual || cancelledAt,
+              remarks: `${cancelReason} - ${cancelRemarks}`,
+              doer: cancelledBy,
+            } : b.foPersonStage?.["1"],
+          },
+          checkOutPersonStage: {
+            ...b.checkOutPersonStage,
+            "1": b.checkOutPersonStage?.["1"] ? {
+              ...b.checkOutPersonStage["1"],
+              status: "Cancelled",
+              actual: b.checkOutPersonStage["1"].actual || cancelledAt,
+              remarks: `${cancelReason} - ${cancelRemarks}`,
+              doer: cancelledBy,
+            } : b.checkOutPersonStage?.["1"],
+          },
+        }
+        : b)
       ));
 
       await refetchBookings();
@@ -4556,6 +4561,12 @@ export default function SalesAccountsTeamPage() {
         : 'stage3';
 
     const currentStage = accountsVerifyData[currentStageKey];
+    const currentStagePlan = selectedBookingForAccounts?.accountsPersonStage?.[accountsVerifyData.currentStage.toString()];
+
+    if (!stageHasPlanned(currentStagePlan)) {
+      toast.error(`Stage ${accountsVerifyData.currentStage} is locked until planned is filled`)
+      return
+    }
 
     // Validate current stage only (not all 3)
     if (!currentStage.paymentReceivedStatus || !currentStage.actualReceivedAmount || !currentStage.remarks || !currentStage.remarks.trim()) {
@@ -4730,6 +4741,12 @@ export default function SalesAccountsTeamPage() {
 
     const currentStageKey = foPMSVerifyData.currentStage === 1 ? 'stage1' : 'stage2';
     const currentStage = foPMSVerifyData[currentStageKey];
+    const currentStagePlan = selectedBookingForFOPMS?.foPersonStage?.[foPMSVerifyData.currentStage.toString()];
+
+    if (!stageHasPlanned(currentStagePlan)) {
+      toast.error(`FO Stage ${foPMSVerifyData.currentStage} is locked until planned is filled`)
+      return
+    }
 
     // Validate current stage only (not all 2)
     if (!currentStage.releasePassActionStatus || !currentStage.pmsBlockStatus || !currentStage.informedToBookingPerson || !currentStage.remarks || !currentStage.remarks.trim()) {
@@ -4887,6 +4904,11 @@ export default function SalesAccountsTeamPage() {
 
   const handleCheckoutVerifySubmit = async () => {
     if (isSubmitting) return
+
+    if (!stageHasPlanned(selectedBookingForCheckout?.checkOutPersonStage?.["1"])) {
+      toast.error("Checkout Verify is locked until planned is filled")
+      return
+    }
 
     if (!checkoutVerifyData.paymentReceivedStatus || !checkoutVerifyData.remarks || !checkoutVerifyData.remarks.trim()) {
       toast.error("Please complete all required fields")
@@ -11103,7 +11125,7 @@ export default function SalesAccountsTeamPage() {
                       </Select>
                     </div> */}
 
-                     {/* PENDING AMOUNT */}
+                    {/* PENDING AMOUNT */}
                     <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
                       <Label className="text-slate-600 text-xs uppercase tracking-wide">
                         Pending Amount
@@ -11112,29 +11134,29 @@ export default function SalesAccountsTeamPage() {
                         {getCurrencySymbol(String(selectedBookingForPayment.currency).slice(0, 3))}{" "}
                         {selectedBookingForPayment
                           ? (() => {
-                              const originalAmt = selectedBookingForPayment.originalAmount;
-                              const receivedAmt = getTotalReceivedRaw(selectedBookingForPayment);
-                              
-                              // Current input currency and rate
-                              const cur = String(paymentData.currency || "INR").toUpperCase();
-                              const inputRate = cur === "USD" ? 85.74 : (cur === "EURO" || cur === "EUR" ? 89.26 : 1);
-                              
-                              // Booking original currency and rate
-                              const bookingCur = String(selectedBookingForPayment.currency || "INR").toUpperCase();
-                              const bookingRate = bookingCur === "USD" ? 85.74 : (bookingCur === "EURO" || bookingCur === "EUR" ? 89.26 : 1);
-                              
-                              // Calculate remaining pending in INR
-                              const pendingInINR = originalAmt - receivedAmt;
-                              const inputtedInINR = (parseFloat(paymentData.receivedAmount) || 0) * inputRate;
-                              const remainingInINR = Math.max(0, pendingInINR - inputtedInINR);
-                              
-                              // Display in booking's original currency
-                              const remainingInBookingCurrency = remainingInINR / bookingRate;
-                              return remainingInBookingCurrency.toLocaleString(undefined, {
-                                minimumFractionDigits: 0,
-                                maximumFractionDigits: 2
-                              });
-                            })()
+                            const originalAmt = selectedBookingForPayment.originalAmount;
+                            const receivedAmt = getTotalReceivedRaw(selectedBookingForPayment);
+
+                            // Current input currency and rate
+                            const cur = String(paymentData.currency || "INR").toUpperCase();
+                            const inputRate = cur === "USD" ? 85.74 : (cur === "EURO" || cur === "EUR" ? 89.26 : 1);
+
+                            // Booking original currency and rate
+                            const bookingCur = String(selectedBookingForPayment.currency || "INR").toUpperCase();
+                            const bookingRate = bookingCur === "USD" ? 85.74 : (bookingCur === "EURO" || bookingCur === "EUR" ? 89.26 : 1);
+
+                            // Calculate remaining pending in INR
+                            const pendingInINR = originalAmt - receivedAmt;
+                            const inputtedInINR = (parseFloat(paymentData.receivedAmount) || 0) * inputRate;
+                            const remainingInINR = Math.max(0, pendingInINR - inputtedInINR);
+
+                            // Display in booking's original currency
+                            const remainingInBookingCurrency = remainingInINR / bookingRate;
+                            return remainingInBookingCurrency.toLocaleString(undefined, {
+                              minimumFractionDigits: 0,
+                              maximumFractionDigits: 2
+                            });
+                          })()
                           : 0}
                       </p>
                     </div>
@@ -11695,6 +11717,17 @@ export default function SalesAccountsTeamPage() {
                     </div>
                   )}
 
+                  {!getCurrentStageData().isCompleted && !stageHasPlanned(selectedBookingForAccounts?.accountsPersonStage?.[accountsVerifyData.currentStage.toString()]) && (
+                    <div className="mb-3 p-3 bg-slate-100 border border-slate-300 rounded-lg">
+                      <p className="text-xs text-slate-700 flex items-center gap-2">
+                        <AlertTriangle className="h-4 w-4 flex-shrink-0 text-amber-600" />
+                        <span>
+                          Stage {accountsVerifyData.currentStage} is locked until planned is filled.
+                        </span>
+                      </p>
+                    </div>
+                  )}
+
                   <div className="grid grid-cols-1 gap-3 sm:gap-4">
                     {/* PAYMENT STATUS */}
                     <div className="space-y-1.5 sm:space-y-1">
@@ -11704,7 +11737,7 @@ export default function SalesAccountsTeamPage() {
 
                       <Select
                         value={getCurrentStageData().paymentReceivedStatus}
-                        disabled={getCurrentStageData().isCompleted || isSubmitting}
+                        disabled={getCurrentStageData().isCompleted || isSubmitting || !stageHasPlanned(selectedBookingForAccounts?.accountsPersonStage?.[accountsVerifyData.currentStage.toString()])}
                         onValueChange={(value) => {
                           const currentStageKey = accountsVerifyData.currentStage === 1 ? 'stage1' : accountsVerifyData.currentStage === 2 ? 'stage2' : 'stage3';
                           setAccountsVerifyData({
@@ -11762,7 +11795,7 @@ export default function SalesAccountsTeamPage() {
                         min={0}
                         placeholder="Enter actual amount received"
                         value={getCurrentStageData().actualReceivedAmount ?? ""}
-                        disabled={getCurrentStageData().isCompleted || isSubmitting}
+                        disabled={getCurrentStageData().isCompleted || isSubmitting || !stageHasPlanned(selectedBookingForAccounts?.accountsPersonStage?.[accountsVerifyData.currentStage.toString()])}
                         onChange={(e) => {
                           let value = Number(e.target.value)
 
@@ -11795,7 +11828,7 @@ export default function SalesAccountsTeamPage() {
                       <Textarea
                         placeholder="Enter verification remarks"
                         value={getCurrentStageData().remarks}
-                        disabled={getCurrentStageData().isCompleted || isSubmitting}
+                        disabled={getCurrentStageData().isCompleted || isSubmitting || !stageHasPlanned(selectedBookingForAccounts?.accountsPersonStage?.[accountsVerifyData.currentStage.toString()])}
                         onChange={(e) => {
                           const currentStageKey = accountsVerifyData.currentStage === 1 ? 'stage1' : accountsVerifyData.currentStage === 2 ? 'stage2' : 'stage3';
                           setAccountsVerifyData({
@@ -11833,7 +11866,7 @@ export default function SalesAccountsTeamPage() {
               {/* Show Submit Button ONLY if: Stage is activated AND not completed */}
               {(() => {
                 const stageData = selectedBookingForAccounts?.accountsPersonStage?.[accountsVerifyData.currentStage.toString()];
-                const isStageActivated = stageData?.planned && stageData.planned.trim() !== "";
+                const isStageActivated = stageHasPlanned(stageData);
                 const isStageNotCompleted = !getCurrentStageData().isCompleted;
                 const canSubmit = isStageActivated && isStageNotCompleted;
 
@@ -12273,6 +12306,17 @@ export default function SalesAccountsTeamPage() {
                 </div>
               )}
 
+              {!getFOCurrentStageData().isCompleted && !stageHasPlanned(selectedBookingForFOPMS?.foPersonStage?.[foPMSVerifyData.currentStage.toString()]) && (
+                <div className="mb-3 p-3 bg-slate-100 border border-slate-300 rounded-lg">
+                  <p className="text-xs text-slate-700 flex items-center gap-2">
+                    <AlertTriangle className="h-4 w-4 flex-shrink-0 text-amber-600" />
+                    <span>
+                      FO Stage {foPMSVerifyData.currentStage} is locked until planned is filled.
+                    </span>
+                  </p>
+                </div>
+              )}
+
               {/* FORM GRID */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                 <div className="space-y-1.5">
@@ -12280,7 +12324,7 @@ export default function SalesAccountsTeamPage() {
                     Action Status <span className="text-red-500">*</span>
                   </Label>
                   <Select
-                    disabled={isAccountsPending || isSubmitting || getFOCurrentStageData().isCompleted}
+                    disabled={isAccountsPending || isSubmitting || getFOCurrentStageData().isCompleted || !stageHasPlanned(selectedBookingForFOPMS?.foPersonStage?.[foPMSVerifyData.currentStage.toString()])}
                     value={getFOCurrentStageData().releasePassActionStatus}
                     onValueChange={(value) => {
                       const stageKey = foPMSVerifyData.currentStage === 1 ? 'stage1' : 'stage2';
@@ -12314,7 +12358,7 @@ export default function SalesAccountsTeamPage() {
                     PMS Block Status <span className="text-red-500">*</span>
                   </Label>
                   <Select
-                    disabled={isAccountsPending || isSubmitting || getFOCurrentStageData().isCompleted}
+                    disabled={isAccountsPending || isSubmitting || getFOCurrentStageData().isCompleted || !stageHasPlanned(selectedBookingForFOPMS?.foPersonStage?.[foPMSVerifyData.currentStage.toString()])}
                     value={getFOCurrentStageData().pmsBlockStatus}
                     onValueChange={(value) => {
                       const stageKey = foPMSVerifyData.currentStage === 1 ? 'stage1' : 'stage2';
@@ -12346,7 +12390,7 @@ export default function SalesAccountsTeamPage() {
                   Informed to Booking Taken Person <span className="text-red-500">*</span>
                 </Label>
                 <Select
-                  disabled={isAccountsPending || isSubmitting || getFOCurrentStageData().isCompleted}
+                  disabled={isAccountsPending || isSubmitting || getFOCurrentStageData().isCompleted || !stageHasPlanned(selectedBookingForFOPMS?.foPersonStage?.[foPMSVerifyData.currentStage.toString()])}
                   value={getFOCurrentStageData().informedToBookingPerson}
                   onValueChange={(value) => {
                     const stageKey = foPMSVerifyData.currentStage === 1 ? 'stage1' : 'stage2';
@@ -12377,7 +12421,7 @@ export default function SalesAccountsTeamPage() {
                   Remarks <span className="text-red-500">*</span>
                 </Label>
                 <Textarea
-                  disabled={isAccountsPending || isSubmitting || getFOCurrentStageData().isCompleted}
+                  disabled={isAccountsPending || isSubmitting || getFOCurrentStageData().isCompleted || !stageHasPlanned(selectedBookingForFOPMS?.foPersonStage?.[foPMSVerifyData.currentStage.toString()])}
                   rows={3}
                   placeholder="Enter any additional remarks..."
                   value={getFOCurrentStageData().remarks}
@@ -12435,7 +12479,7 @@ export default function SalesAccountsTeamPage() {
               {/* Show Submit Button ONLY if: Stage is activated AND not completed */}
               {(() => {
                 const stageData = selectedBookingForFOPMS?.foPersonStage?.[foPMSVerifyData.currentStage.toString()];
-                const isStageActivated = stageData?.planned && stageData.planned.trim() !== "";
+                const isStageActivated = stageHasPlanned(stageData);
                 const isStageNotCompleted = !getFOCurrentStageData().isCompleted;
                 const canSubmit = isStageActivated && isStageNotCompleted && isFOCurrentStageComplete() && !isAccountsPending;
 
@@ -12798,6 +12842,15 @@ export default function SalesAccountsTeamPage() {
                   </div>
                 )}
 
+                {!selectedBookingForCheckout?.checkOutPersonStage?.["1"]?.actual && !stageHasPlanned(selectedBookingForCheckout?.checkOutPersonStage?.["1"]) && (
+                  <div className="mb-4 p-3 bg-slate-100 border border-slate-300 rounded-lg">
+                    <p className="text-xs text-slate-700 flex items-center gap-2">
+                      <AlertTriangle className="h-4 w-4 flex-shrink-0 text-amber-600" />
+                      <span>Checkout Verify is locked until planned is filled.</span>
+                    </p>
+                  </div>
+                )}
+
                 {/* Inputs Section */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 
@@ -12808,7 +12861,7 @@ export default function SalesAccountsTeamPage() {
                     </Label>
 
                     <Select
-                      disabled={isSubmitting || !!selectedBookingForCheckout?.checkOutPersonStage?.["1"]?.actual}   // 🔒 submit/completed ke time disable
+                      disabled={isSubmitting || !!selectedBookingForCheckout?.checkOutPersonStage?.["1"]?.actual || !stageHasPlanned(selectedBookingForCheckout?.checkOutPersonStage?.["1"])}   // 🔒 submit/completed/planned blank ke time disable
                       value={checkoutVerifyData.paymentReceivedStatus}
                       onValueChange={(value) =>
                         setCheckoutVerifyData({
@@ -12821,7 +12874,7 @@ export default function SalesAccountsTeamPage() {
                         className={`
       rounded-md border border-green-300 bg-white shadow-sm
       hover:border-green-400 focus:ring-2 focus:ring-green-400 transition-all
-      ${(isSubmitting || !!selectedBookingForCheckout?.checkOutPersonStage?.["1"]?.actual) ? "cursor-not-allowed opacity-70" : ""}
+      ${(isSubmitting || !!selectedBookingForCheckout?.checkOutPersonStage?.["1"]?.actual || !stageHasPlanned(selectedBookingForCheckout?.checkOutPersonStage?.["1"])) ? "cursor-not-allowed opacity-70" : ""}
     `}
                       >
                         <SelectValue placeholder="Select status" />
@@ -12847,9 +12900,9 @@ export default function SalesAccountsTeamPage() {
                   <Label className="text-xs font-medium text-green-700">Remarks <span className="text-red-500">*</span></Label>
 
                   <Textarea
-                    disabled={isSubmitting || !!selectedBookingForCheckout?.checkOutPersonStage?.["1"]?.actual}
+                    disabled={isSubmitting || !!selectedBookingForCheckout?.checkOutPersonStage?.["1"]?.actual || !stageHasPlanned(selectedBookingForCheckout?.checkOutPersonStage?.["1"])}
                     placeholder="Enter any additional remarks..."
-                    className={`rounded-md border border-green-300 bg-white shadow-sm hover:border-green-400 focus:ring-2 focus:ring-green-400 transition-all ${(isSubmitting || !!selectedBookingForCheckout?.checkOutPersonStage?.["1"]?.actual) ? "cursor-not-allowed opacity-75 bg-gray-50" : ""}`}
+                    className={`rounded-md border border-green-300 bg-white shadow-sm hover:border-green-400 focus:ring-2 focus:ring-green-400 transition-all ${(isSubmitting || !!selectedBookingForCheckout?.checkOutPersonStage?.["1"]?.actual || !stageHasPlanned(selectedBookingForCheckout?.checkOutPersonStage?.["1"])) ? "cursor-not-allowed opacity-75 bg-gray-50" : ""}`}
                     value={checkoutVerifyData.remarks}
                     onChange={(e) =>
                       setCheckoutVerifyData({ ...checkoutVerifyData, remarks: e.target.value })
@@ -12910,11 +12963,12 @@ export default function SalesAccountsTeamPage() {
                   onClick={handleCheckoutVerifySubmit}
                   disabled={
                     isSubmitting ||
+                    !stageHasPlanned(selectedBookingForCheckout?.checkOutPersonStage?.["1"]) ||
                     !checkoutVerifyData.paymentReceivedStatus ||
                     !checkoutVerifyData.remarks ||
                     checkoutVerifyData.remarks.trim() === ""
                   }
-                  className={`flex items-center gap-2 ${isSubmitting || !checkoutVerifyData.paymentReceivedStatus || !checkoutVerifyData.remarks || checkoutVerifyData.remarks.trim() === ""
+                  className={`flex items-center gap-2 ${isSubmitting || !stageHasPlanned(selectedBookingForCheckout?.checkOutPersonStage?.["1"]) || !checkoutVerifyData.paymentReceivedStatus || !checkoutVerifyData.remarks || checkoutVerifyData.remarks.trim() === ""
                     ? "cursor-not-allowed opacity-70"
                     : "cursor-pointer !bg-green-600 hover:!bg-green-700 !text-white"
                     }`}
@@ -13681,9 +13735,9 @@ export default function SalesAccountsTeamPage() {
                         <span className="text-gray-600">Payment Collection History:</span>
 
                         {Number(viewBookingData?.receivedAmount || viewBookingData?.paidAmount || 0) > 0 ||
-                        (Array.isArray(viewBookingData?.paymentCollectionHistory) && viewBookingData.paymentCollectionHistory.length > 0) ||
-                        (typeof viewBookingData?.paymentHistoryLink === "string" && viewBookingData.paymentHistoryLink.trim() !== "") ||
-                        (Array.isArray(viewBookingData?.paymentHistoryLink) && viewBookingData.paymentHistoryLink.length > 0) ? (
+                          (Array.isArray(viewBookingData?.paymentCollectionHistory) && viewBookingData.paymentCollectionHistory.length > 0) ||
+                          (typeof viewBookingData?.paymentHistoryLink === "string" && viewBookingData.paymentHistoryLink.trim() !== "") ||
+                          (Array.isArray(viewBookingData?.paymentHistoryLink) && viewBookingData.paymentHistoryLink.length > 0) ? (
                           <button
                             type="button"
                             onClick={() =>

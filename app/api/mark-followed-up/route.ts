@@ -36,10 +36,10 @@ export async function POST(req: NextRequest) {
     } finally {
       connection.release()
     }
-  } catch (err: any) {
-    console.error('[API Mark Followed Up Error]', err)
+  } catch {
+    console.error('[mark-followed-up] failed to record follow-up')
     return NextResponse.json(
-      { success: false, error: err.message || 'Failed to mark lead as followed up' },
+      { success: false, error: 'Failed to mark lead as followed up' },
       { status: 500 }
     )
   }

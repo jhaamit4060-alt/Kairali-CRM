@@ -332,6 +332,18 @@ const pb2Styles = {
   },
 };
 
+function isPercentDiscountType(type?: string) {
+  return type === "%" || type === "percentage";
+}
+
+function clampPercentDiscountInput(type: string | undefined, value: string) {
+  if (!isPercentDiscountType(type)) return value;
+  if (value === "") return "";
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return value;
+  return String(Math.min(100, Math.max(0, numeric)));
+}
+
 // Single payment breakdown row matching Image 2 layout:
 // Label (green) | Rate (readonly-grey) | Discount% type+input | Rate after Discount (readonly-grey) | Tax % + Tax amt (readonly-grey) | Total (readonly-grey)
 function DiscountRow({
@@ -398,6 +410,7 @@ function DiscountRow({
             <input
               type="number"
               min="0"
+              max={isPercentDiscountType(effectiveDiscountType) ? "100" : undefined}
               step="any"
               style={{ ...pb2Styles.inputEditable, minWidth: 70, ...(!canEditDiscount ? { background: "#f0f0f0" } : {}) }}
               value={lockDiscount ? "" : effectiveDiscount}
@@ -503,6 +516,7 @@ function SummaryRow({
           </select>
           <input
             type="number" min="0" step="any"
+            max={isPercentDiscountType(discountType || "%") ? "100" : undefined}
             style={{ ...pb2Styles.inputEditable, minWidth: 70, ...(discDisabled ? { background: "#f0f0f0" } : {}) }}
             value={lockDiscount ? "" : (discount ?? "")}
             readOnly={discDisabled}
@@ -536,12 +550,23 @@ export function StepPaymentBreakdown({
   isVoucher, onVoucherChange, errors = {}
 }: PaymentProps) {
   const pb = pricing?.paymentBreakdown;
-  const set = (k: string, v: string) => onDiscountChange({ ...discounts, [k]: v });
+  const set = (k: string, v: string) => {
+    const next = { ...discounts, [k]: v };
+    if (k.endsWith("Discount")) {
+      next[k] = clampPercentDiscountInput(next[`${k}Type`] || "%", v);
+    }
+    if (k.endsWith("DiscountType")) {
+      const discountKey = k.replace(/Type$/, "");
+      next[discountKey] = clampPercentDiscountInput(v, next[discountKey] ?? "");
+    }
+    onDiscountChange(next);
+  };
 
   // Frontend-computed after-discount values (don't rely on backend pb?.xxxAfterDiscount)
   const computeAfter = (rate: string | number, discType: string, disc: string) => {
     const r = parseFloat(String(rate) || "0");
-    const d = parseFloat(disc || "0");
+    const rawDiscount = parseFloat(disc || "0");
+    const d = isPercentDiscountType(discType) ? Math.min(100, Math.max(0, rawDiscount || 0)) : (rawDiscount || 0);
     if (discType === "cash") return Math.max(0, r - d);
     return Math.max(0, r - (r * d / 100));
   };
@@ -817,6 +842,7 @@ export function StepPaymentBreakdown({
                     <input
                       type="number"
                       min="0"
+                      max={isPercentDiscountType(discounts.transportationDiscountType || "%") ? "100" : undefined}
                       style={{ ...pb2Styles.inputEditable, minWidth: 70, ...(locked ? { background: "#f0f0f0" } : {}) }}
                       value={locked ? "" : (discounts.transportationDiscount ?? "")}
                       readOnly={locked}
@@ -918,6 +944,7 @@ export function StepPaymentBreakdown({
                     </select>
                     <input
                       type="number" min="0"
+                      max={isPercentDiscountType(discounts.otherAmountDiscountType || "%") ? "100" : undefined}
                       style={{ ...pb2Styles.inputEditable, minWidth: 70, ...(locked ? { background: "#f0f0f0" } : {}) }}
                       value={locked ? "" : (discounts.otherAmountDiscount ?? "")}
                       readOnly={locked}

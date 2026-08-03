@@ -6,12 +6,22 @@ import ResultCard from './ResultCard'
 import TicketForm from './TicketForm'
 import { ChatMessage, LookupResponse, TicketResponse, getFollowUpAnswer } from './types'
 import { useAuth } from '@/hooks/use-auth'
+import { usePathname } from 'next/navigation'
 
 function uid() {
     return Math.random().toString(36).slice(2, 10)
 }
 
 export default function ChatWidget() {
+    const { user, isLoading } = useAuth()
+    const pathname = usePathname()
+
+    if (isLoading || !user || pathname === '/') return null
+
+    return <AuthenticatedChatWidget />
+}
+
+function AuthenticatedChatWidget() {
     const { user } = useAuth()
     const [open, setOpen] = useState(false)
     const [greeted, setGreeted] = useState(false)

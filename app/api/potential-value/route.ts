@@ -109,9 +109,9 @@ export async function GET(req: NextRequest) {
       totalRows: rows.length
     })
 
-  } catch (error: any) {
-    console.error('[potential-value API] Error:', error)
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+  } catch {
+    console.error('[potential-value] potential value lookup failed')
+    return NextResponse.json({ success: false, error: 'Failed to fetch potential value data' }, { status: 500 })
   } finally {
     if (connection) connection.release()
   }

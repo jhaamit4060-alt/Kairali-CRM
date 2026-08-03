@@ -4,7 +4,12 @@ import { useAuth } from '@/hooks/use-auth'
 import { usePathname, useRouter } from 'next/navigation'
 import { useEffect } from 'react'
 
-// Map routes to required permissions
+// Map routes to required permissions.
+//
+// Keys are matched against `usePathname()` with `pagePermissions[pathname]`, so a
+// key must be exactly a pathname: leading slash, no query string, no trailing
+// slash. Three keys did not satisfy that and so enforced nothing (matrix M6/M7);
+// they are corrected below and each carries a note.
 const pagePermissions: Record<string, string> = {
   '/dashboard': 'dashboard.view',
   '/leads': 'leads.view',
@@ -40,8 +45,16 @@ const pagePermissions: Record<string, string> = {
   '/google-adword-reports': 'google_adword_report.view',
   '/calls/reports': 'calls_report.view',
   '/sales/reports': 'sales_report.view',
-  '/voicecall/data?tab=received': 'ai_voice_received.view',
-  '/voicecall/data?tab=sent': 'ai_voice_sent.view',
+  // M6: these were `/voicecall/data?tab=received` and `?tab=sent`, which
+  // `usePathname()` can never produce. The pages the two tabs became are
+  // `/voicecall/data/received` and `/voicecall/data/sent`, and each already calls
+  // `hasPermission` for exactly the permission its old key named
+  // (`app/voicecall/data/received/page.tsx:1696`,
+  // `app/voicecall/data/sent/page.tsx:466`), so the guard now agrees with the page
+  // rather than being silently inert. `/voicecall/data` itself stays unmapped —
+  // giving it a permission would be new policy, which is D7.
+  '/voicecall/data/received': 'ai_voice_received.view',
+  '/voicecall/data/sent': 'ai_voice_sent.view',
   '/voicecall/summary': 'ai_voice_summary.view',
   '/meetings': 'meetings.view',
   '/accounts-tracker': 'accounts_tracker.view',
@@ -49,7 +62,10 @@ const pagePermissions: Record<string, string> = {
   '/crr-fms': 'crr_fms.view',
   '/voicecall/non-qualified': 'non_qualified.view',
   '/fms/pending-tasks': 'task_fms.view',
-  'fms/enquiry-reverification': 'cold_enquiry_reverification.view',
+  // M7: was `fms/enquiry-reverification` with no leading slash, so it never
+  // matched. `app/fms/enquiry-reverification/page.tsx` is a real page and the
+  // permission is unchanged — only the key is repaired.
+  '/fms/enquiry-reverification': 'cold_enquiry_reverification.view',
 }
 
 const isRestricted = (pathname: string) => {
@@ -114,3 +130,34 @@ export default function RouteGuard({ children }: { children: React.ReactNode }) 
 
   return <>{children}</>
 }
+
+
+// export default function RouteGuard({ children }: { children: React.ReactNode }) {
+//   const { user, hasPermission, isLoading } = useAuth()
+//   const pathname = usePathname()
+//   const router = useRouter()
+
+//   useEffect(() => {
+//     // Don't redirect while loading
+//     if (isLoading) return
+
+//     // Allow access to login page for all users
+//     if (pathname === '/') return
+//     // Check if current path requires permission
+//     const requiredPermission = pagePermissions[pathname]
+
+//     // If route requires permission and user doesn't have it, redirect to access-denied
+//     if (requiredPermission && user && !hasPermission(requiredPermission)) {
+//       router.replace('/access-denied')
+//     }
+//   }, [user, isLoading, pathname, hasPermission, router])
+
+//   // Hold guarded children back until the session bootstrap in AuthProvider has
+//   // settled. Rendering them during loading let child components mount and read
+//   // the localStorage compatibility cache before /api/auth/me had a chance to
+//   // disprove it — a tampered local record would have driven a full render pass.
+//   // The wait is one same-origin request; a blank frame is the intended cost.
+//   if (isLoading) return <></>
+
+//   return <>{children}</>
+// }

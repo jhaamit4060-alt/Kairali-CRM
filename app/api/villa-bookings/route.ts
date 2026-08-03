@@ -17,10 +17,10 @@ export async function GET() {
     )
 
     return NextResponse.json(rows)
-  } catch (error: any) {
-    console.error("[villa-bookings API] Error:", error)
+  } catch {
+    console.error("[villa-bookings] booking lookup failed")
     return NextResponse.json(
-      { success: false, error: error.message || "Failed to fetch villa bookings" },
+      { success: false, error: "Failed to fetch villa bookings" },
       { status: 500 }
     )
   } finally {

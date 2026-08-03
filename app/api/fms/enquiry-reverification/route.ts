@@ -207,9 +207,9 @@ export async function GET(req: NextRequest) {
       }
     })
 
-  } catch (error: any) {
-    console.error("[Enquiry API GET Error]:", error)
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+  } catch {
+    console.error("[enquiry-reverification API GET] request failed")
+    return NextResponse.json({ success: false, error: "Failed to fetch enquiry reverification data" }, { status: 500 })
   } finally {
     if (connection) connection.release()
   }
@@ -363,9 +363,9 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ success: false, error: "Invalid action. Only Executive and Senior verification updates are allowed." }, { status: 400 })
 
-  } catch (error: any) {
-    console.error("[Enquiry API POST Error]:", error)
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+  } catch {
+    console.error("[enquiry-reverification API POST] request failed")
+    return NextResponse.json({ success: false, error: "Failed to update enquiry reverification data" }, { status: 500 })
   } finally {
     if (connection) connection.release()
   }

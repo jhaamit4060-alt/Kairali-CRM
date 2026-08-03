@@ -97,10 +97,10 @@ export async function GET(request: Request) {
         } finally {
             connection.release();
         }
-    } catch (error: any) {
-        console.error("[Non-Qualified API Error]:", error);
+    } catch {
+        console.error("[voicecall/non-qualified API] request failed");
         return NextResponse.json(
-            { error: "Database connection failed", details: error.message },
+            { error: "Database connection failed" },
             { status: 500 }
         );
     }

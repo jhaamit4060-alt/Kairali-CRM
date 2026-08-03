@@ -83,7 +83,7 @@ export async function uploadAudioToDrive(
   fileName: string,
   mimeType = 'audio/webm'
 ): Promise<{ fileId: string; streamUrl: string; webViewLink: string }> {
-  const drive    = getDriveClient()
+  const drive = getDriveClient()
   const folderId = process.env.GOOGLE_DRIVE_FOLDER_ID
   if (!folderId) throw new Error('GOOGLE_DRIVE_FOLDER_ID is not set in .env')
 
@@ -92,18 +92,18 @@ export async function uploadAudioToDrive(
   stream.push(null)
 
   const res = await drive.files.create({
-    supportsAllDrives:         true,
+    supportsAllDrives: true,
     includeItemsFromAllDrives: true,
     fields: 'id, webViewLink',
     requestBody: {
-      name:    fileName,
+      name: fileName,
       parents: [folderId],
       mimeType,
     },
     media: { mimeType, body: stream },
   } as any)
 
-  const fileId      = res.data.id!
+  const fileId = res.data.id!
   const webViewLink = res.data.webViewLink || `https://drive.google.com/file/d/${fileId}/view`
 
   // NO public permission needed anymore — audio is served via our proxy route
@@ -121,7 +121,7 @@ export async function deleteAudioFromDrive(audioUrl: string): Promise<void> {
   const match = audioUrl.match(/[?&]id=([^&]+)/)
   if (!match) return
   const fileId = match[1]
-  const drive  = getDriveClient()
+  const drive = getDriveClient()
   try {
     await drive.files.delete({ fileId, supportsAllDrives: true })
   } catch (err: any) {

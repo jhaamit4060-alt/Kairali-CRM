@@ -52,7 +52,7 @@ async function getDataById_NewXXXX(currentTextId: any, formType: any, pool: any)
     if (formType === "individual") {
         var bookingId = (currentTextId.toString().split("|")[0]).replace("EF", "PMS");
         var collectionAmountMap = await getCollectionById(bookingId, pool)
-        
+
         let [rows]: any[] = await pool.execute(
             `Select 
                 p1.timestamp,

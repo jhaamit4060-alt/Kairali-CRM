@@ -95,13 +95,13 @@ export async function GET(req: NextRequest) {
       totalRows: rows.length,
     })
 
-  } catch (error: any) {
-    console.error('[payment-collection API] Error:', error)
+  } catch {
+    console.error('[payment-collection API] request failed')
 
     return NextResponse.json(
       {
         success: false,
-        error: error.message || 'Failed to fetch payment data',
+        error: 'Failed to fetch payment data',
       },
       { status: 500 }
     )

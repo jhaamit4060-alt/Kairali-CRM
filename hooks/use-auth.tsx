@@ -68,8 +68,6 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
-// Your Google Apps Script URL - REPLACE WITH YOUR ACTUAL URL
-const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzDC3m9yUuTeCska7osn17tIxixwtEt-sN_7tFLi9f8Yb34l9qEcxPg1dCF5KCwvH-i/exec"
 //"approvalAll", "collectionAll",
 // Action permissions configuration
 const actionPermissionsByPageByRole: Record<string, Record<string, string[]>> = {
@@ -219,20 +217,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [rolePermissions, setRolePermissions] = useState<Record<string, string[]>>(fallbackRolePermissions)
   const [users, setUsers] = useState<User[]>([])
 
-  // Load role permissions from Google Sheets
+  // Load role permissions through the same-origin route. The Apps Script
+  // deployment URL and the getRolePermissions request now live server-side in
+  // /api/auth/permissions, so neither is in the browser bundle. Same values,
+  // same caching, same fallback — only the transport changed.
   const loadRolePermissions = async () => {
     try {
-      const url = new URL(SCRIPT_URL)
-      url.searchParams.append("action", "getRolePermissions")
-
-      const response = await fetch(url.toString())
+      const response = await fetch("/api/auth/permissions", {
+        cache: "no-store",
+        headers: { "Cache-Control": "no-store" },
+      })
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
-      const contentType = response.headers.get("content-type");
-      if (!contentType || !contentType.includes("application/json")) {
-        throw new TypeError("Response is not JSON");
-      }
+      // The explicit content-type check the direct Apps Script fetch needed is
+      // gone: this route always answers JSON, and anything unparseable throws
+      // out of .json() into the same catch that the TypeError reached.
       const data = await response.json()
 
       if (data.success && data.rolePermissions) {
@@ -293,21 +293,47 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Load fresh permissions in background
       loadRolePermissions()
 
-      // Load stored user (UI state only — the real session lives in the HttpOnly
-      // cookie set by /api/auth/login; this local copy just avoids a flash of
-      // logged-out UI while middleware/API auth independently verify the cookie)
-      const storedUser = localStorage.getItem("kairali_user")
-      if (storedUser) {
-        try {
-          const userData = JSON.parse(storedUser)
-          setUser(userData)
-        } catch (e) {
-          console.error("Failed to parse stored user")
-          localStorage.removeItem("kairali_user")
-        }
-      }
+      // Establish the user from the signed HttpOnly session, never from
+      // localStorage. The local copy is writable by anyone with devtools, so
+      // reading it back would let a tampered record become the app's idea of
+      // who is signed in. /api/auth/me re-derives identity from the cookie
+      // signature on every reload; any failure to prove a session leaves the
+      // user null and drops the stale local copy.
+      try {
+        const response = await fetch("/api/auth/me", {
+          cache: "no-store",
+          headers: { "Cache-Control": "no-store" },
+        })
 
-      setIsLoading(false)
+        // 401 (no/forged/expired session) and any other non-OK status are the
+        // same answer here: no established identity.
+        if (!response.ok) throw new Error("No active session")
+
+        const data = await response.json()
+
+        // A reply we don't recognise is not an identity, however it failed.
+        if (data?.success !== true || !data.user || typeof data.user !== "object" || Array.isArray(data.user)) {
+          throw new Error("Malformed session response")
+        }
+
+        const sessionUser: User = data.user
+        // Same harmless fallback login applies, so hasActionPermission can read
+        // user.action without a guard on legacy records that predate the field.
+        sessionUser.action = sessionUser.action || {}
+
+        setUser(sessionUser)
+        // Compatibility cache only: legacy components still read this key
+        // directly. It is written from the verified session, never read back to
+        // decide who the user is.
+        localStorage.setItem("kairali_user", JSON.stringify(sessionUser))
+      } catch {
+        // No session, an unreadable reply, or a failed request — all end the
+        // same way. Fixed handling: the error itself is never logged.
+        setUser(null)
+        localStorage.removeItem("kairali_user")
+      } finally {
+        setIsLoading(false)
+      }
     }
 
     initAuth()
@@ -324,19 +350,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const data = await response.json()
 
       if (data.success && data.user) {
-        // Set permissions from dynamically loaded rolePermissions
-        if (data.user.email && rolePermissions[data.user.email]) {
-          data.user.permissions = rolePermissions[data.user.email]
-        } else {
-          // Fallback to permissions from server or empty array
-          data.user.permissions = data.user.permissions || []
-        }
-        // if (data.user.role && rolePermissions[data.user.role]) {
-        //   data.user.permissions = rolePermissions[data.user.role]
-        // } else {
-        //   // Fallback to permissions from server or empty array
-        //   data.user.permissions = data.user.permissions || []
-        // }
+        // Trust the server's permission set. /api/auth/login now resolves the
+        // role-permissions sheet before signing the session cookie and returns
+        // the very object it signed, so this is already the sheet's array for
+        // this account when the sheet had one. Re-applying the client's own
+        // `rolePermissions` state here could only substitute a
+        // `cached_role_permissions` copy up to an hour stale for the value that
+        // is actually in the cookie — and the cookie's set is what the next
+        // reload restores through /api/auth/me. That was the last local
+        // producer of a login-versus-reload divergence
+        // (docs/PHASE_8_RBAC_AUTHORIZATION_MATRIX.md M1/M2, rollout step 5).
+        //
+        // Anything that is not an array is not a permission set: `hasPermission`
+        // reads this with `.includes(...)`, so a missing or wrongly typed value
+        // becomes [] — grants nothing, throws nothing.
+        data.user.permissions = Array.isArray(data.user.permissions) ? data.user.permissions : []
 
         data.user.action = data.user.action || {}
 

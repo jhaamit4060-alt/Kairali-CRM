@@ -181,8 +181,8 @@ export async function GET(req: NextRequest) {
 
         return NextResponse.json({ success: true, data });
 
-    } catch (e: any) {
-        console.error('Modal Leads API Error:', e);
-        return NextResponse.json({ success: false, message: e.message }, { status: 500 });
+    } catch {
+        console.error('Modal Leads API Error: request failed');
+        return NextResponse.json({ success: false, message: 'Internal server error' }, { status: 500 });
     }
 }

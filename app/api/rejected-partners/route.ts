@@ -7,6 +7,7 @@ export const runtime = "nodejs"
 const DEFAULT_GAS_READ_URL =
     "https://script.google.com/macros/s/AKfycbwiJWIPRo4CgZIJNtTGbNk-MMfCojgJIO3R4iuzbIekTQ5QFgsTscwIlsrWzJKflUuV/exec"
 const LOCAL_REJECTED_FILE = path.join(process.cwd(), "data", "rejected-partners.json")
+const UPSTREAM_TIMEOUT_MS = 20_000
 
 const GAS_READ_URL =
     process.env.GAS_URL?.trim() ||
@@ -65,10 +66,38 @@ async function parseGASResponse(res: Response) {
     try {
         return JSON.parse(text)
     } catch {
+        // Never echo the raw upstream body back to the caller; status code only.
         return {
             status: "error",
-            message: text || (res.ok ? "Operation completed" : `GAS responded with ${res.status}`),
+            message: res.ok
+                ? "Apps Script returned an unreadable response."
+                : `GAS responded with ${res.status}`,
         }
+    }
+}
+
+// Describes an upstream failure without leaking the URL, payload, response body,
+// or the exception object itself. Error name only.
+function describeUpstreamError(error: unknown) {
+    const name = error instanceof Error ? error.name : "UnknownError"
+    return name === "AbortError"
+        ? "upstream request timed out"
+        : `upstream request failed (${name})`
+}
+
+// One 20s budget per upstream attempt, covering both the fetch and the
+// response body read (the abort signal also tears down an in-flight body).
+async function fetchGASWithDeadline(url: string, init: RequestInit) {
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), UPSTREAM_TIMEOUT_MS)
+    try {
+        const res = await fetch(url, { ...init, signal: controller.signal })
+        if (!res.ok) {
+            return { ok: false as const, status: res.status }
+        }
+        return { ok: true as const, status: res.status, json: await parseGASResponse(res) }
+    } finally {
+        clearTimeout(timeout)
     }
 }
 
@@ -133,13 +162,14 @@ async function writeLocalRejected(items: RejectedPartner[]) {
 export async function GET() {
     try {
         const localData = await readLocalRejected()
-        const res = await fetch(`${GAS_READ_URL}?action=rejected`, { cache: "no-store" })
+        const result = await fetchGASWithDeadline(`${GAS_READ_URL}?action=rejected`, { cache: "no-store" })
 
-        if (!res.ok) {
+        if (!result.ok) {
+            console.error("[rejected-partners GET] upstream returned status", result.status)
             return NextResponse.json({ status: "success", data: localData, source: "local_only" })
         }
 
-        const json = await parseGASResponse(res)
+        const json = result.json
         if (String(json?.status || "").toLowerCase() !== "success") {
             return NextResponse.json({ status: "success", data: localData, source: "local_only" })
         }
@@ -149,7 +179,7 @@ export async function GET() {
         return NextResponse.json({ ...json, data: merged, source: "gas_plus_local" })
 
     } catch (error) {
-        console.error("[rejected-partners GET] fetch error:", error)
+        console.error("[rejected-partners GET]", describeUpstreamError(error))
         const localData = await readLocalRejected()
         return NextResponse.json({ status: "success", data: localData, source: "local_only" })
     }
@@ -176,19 +206,27 @@ export async function POST(request: Request) {
         let lastErrorMessage = "Failed to reject partner"
 
         for (const url of candidates) {
-            const res = await fetch(url, {
-                method: "POST",
-                headers: { "Content-Type": "text/plain;charset=utf-8" },
-                body: payload,
-                cache: "no-store",
-            })
-
-            if (!res.ok) {
-                lastErrorMessage = `GAS responded with ${res.status}`
+            let result: Awaited<ReturnType<typeof fetchGASWithDeadline>>
+            try {
+                result = await fetchGASWithDeadline(url, {
+                    method: "POST",
+                    headers: { "Content-Type": "text/plain;charset=utf-8" },
+                    body: payload,
+                    cache: "no-store",
+                })
+            } catch (error) {
+                lastErrorMessage = describeUpstreamError(error)
+                console.error("[rejected-partners POST]", lastErrorMessage)
                 continue
             }
 
-            const json = await parseGASResponse(res)
+            if (!result.ok) {
+                console.error("[rejected-partners POST] upstream returned status", result.status)
+                lastErrorMessage = `GAS responded with ${result.status}`
+                continue
+            }
+
+            const json = result.json
             const status = String(json?.status || "").toLowerCase()
             const message = String(json?.message || "")
 
@@ -221,7 +259,7 @@ export async function POST(request: Request) {
         })
 
     } catch (error) {
-        console.error("[rejected-partners POST] fetch error:", error)
+        console.error("[rejected-partners POST]", describeUpstreamError(error))
         if (normalized) {
             const localData = await readLocalRejected()
             const merged = dedupeRejected(sortRejected([normalized, ...localData]))

@@ -22,6 +22,8 @@ type CachedDraftEntry = {
 }
 
 const DRAFT_CACHE_TTL_MS = 12 * 60 * 60 * 1000
+const GEMINI_REQUEST_TIMEOUT_MS = 20000
+const GENERIC_UPSTREAM_ERROR = 'Failed to generate follow-up message'
 const globalForDraftCache = globalThis as typeof globalThis & {
   __dealAssistantDraftCache?: Map<string, CachedDraftEntry>
 }
@@ -191,47 +193,63 @@ export async function POST(req: NextRequest) {
       fullTextPrompt = `${SYSTEM_PROMPT}\n\nUser Context:\n${userPrompt}`
     }
 
-    // Abort controller for 15s timeout
+    // Single deadline covering the fetch and the response body read
     const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), 20000)
+    const timeoutId = setTimeout(() => controller.abort(), GEMINI_REQUEST_TIMEOUT_MS)
 
-    // Fetch call to Google Gemini API
-    const response = await fetch(`${GEMINI_CONFIG.apiUrl}?key=${apiKey}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      signal: controller.signal,
-      body: JSON.stringify({
-        contents: [
-          {
-            parts: [
-              {
-                text: fullTextPrompt
+    let upstreamStatus = 0
+    let upstreamOk = false
+    let rawMessage = ''
+
+    try {
+      // Fetch call to Google Gemini API
+      const response = await fetch(`${GEMINI_CONFIG.apiUrl}?key=${apiKey}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        signal: controller.signal,
+        body: JSON.stringify({
+          contents: [
+            {
+              parts: [
+                {
+                  text: fullTextPrompt
+                }
+              ]
+            }
+          ],
+          generationConfig: normalizedMode === 'followup'
+            ? {
+                maxOutputTokens: 1024,
+                temperature: 0.7,
+                thinkingConfig: { thinkingBudget: 0 },
               }
-            ]
-          }
-        ],
-        generationConfig: normalizedMode === 'followup'
-          ? {
-              maxOutputTokens: 1024,
-              temperature: 0.7,
-              thinkingConfig: { thinkingBudget: 0 },
-            }
-          : {
-              maxOutputTokens: 512,
-              temperature: 0.4,
-              thinkingConfig: { thinkingBudget: 0 },
-            }
+            : {
+                maxOutputTokens: 512,
+                temperature: 0.4,
+                thinkingConfig: { thinkingBudget: 0 },
+              }
+        })
       })
-    })
 
-    clearTimeout(timeoutId)
+      upstreamStatus = response.status
+      upstreamOk = response.ok
 
-    if (!response.ok) {
-      const errorText = await response.text()
-      console.error('[Gemini API Error Response]', errorText)
-      if (response.status === 429 || response.status === 503 || response.status === 504) {
+      if (upstreamOk) {
+        const data = await response.json()
+        rawMessage = data?.candidates?.[0]?.content?.parts?.[0]?.text || ''
+      } else {
+        // Drain the error body inside the deadline; its contents are never logged or returned.
+        await response.text().catch(() => undefined)
+      }
+    } finally {
+      clearTimeout(timeoutId)
+    }
+
+    if (!upstreamOk) {
+      console.error('[Gemini API Error] upstream responded with status', upstreamStatus)
+      if (upstreamStatus === 429 || upstreamStatus === 503 || upstreamStatus === 504) {
         const fallbackMessage = buildLocalFallback(normalizedMode, {
           name,
           stage,
@@ -254,12 +272,12 @@ export async function POST(req: NextRequest) {
         })
         return NextResponse.json(fallbackPayload)
       }
-      throw new Error(`Gemini API responded with status ${response.status}: ${errorText}`)
+      return NextResponse.json(
+        { success: false, error: GENERIC_UPSTREAM_ERROR },
+        { status: 500 }
+      )
     }
 
-    const data = await response.json()
-    const rawMessage = data.candidates?.[0]?.content?.parts?.[0]?.text || ''
-    
     // Clean up response if it wraps with quotes or whitespace
     const message = rawMessage.trim().replace(/^["']|["']$/g, '')
 
@@ -275,10 +293,12 @@ export async function POST(req: NextRequest) {
     })
     return NextResponse.json(payload)
 
-  } catch (err: any) {
-    console.error('[API Generate Follow-up Error]', err)
+  } catch (err) {
+    // Log only a coarse failure kind: error objects/messages may embed the key, URL or prompt.
+    const failureKind = err instanceof Error && err.name === 'AbortError' ? 'upstream_timeout' : 'unexpected_error'
+    console.error('[API Generate Follow-up Error]', failureKind)
     return NextResponse.json(
-      { success: false, error: err.message || 'Failed to generate follow-up message using Gemini' },
+      { success: false, error: GENERIC_UPSTREAM_ERROR },
       { status: 500 }
     )
   }

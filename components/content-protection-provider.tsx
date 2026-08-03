@@ -1,33 +1,27 @@
 'use client';
 
-import { ReactNode, useState, useEffect } from 'react';
+import { ReactNode } from 'react';
 import useCopyProtection from '@/hooks/use-copy-protection';
+import { useAuth } from '@/hooks/use-auth';
 
 interface ContentProtectionProviderProps {
   children: ReactNode;
 }
 
 export default function ContentProtectionProvider({ children }: ContentProtectionProviderProps) {
-  const [userRole, setUserRole] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-
-  useEffect(() => {
-    // Get user role from localStorage
-    try {
-      const userDataString = localStorage.getItem('kairali_user');
-      if (userDataString) {
-        const userData = JSON.parse(userDataString);
-        setUserRole(userData?.role || null);
-      }
-    } catch (error) {
-      console.error('Error reading user role:', error);
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
+  // The role comes from the verified session (`AuthProvider` establishes it from
+  // the signed cookie via /api/auth/me), not from the `kairali_user` localStorage
+  // key, which is a write-only compatibility cache anyone with devtools can edit
+  // (matrix M8, rollout step 12). This component sits inside `AuthProvider` in
+  // `app/layout.tsx`, so the context is always available here.
+  //
+  // The read-and-parse effect it replaces produced the same value for an
+  // untampered cache and left `userRole` null while it ran; `user` is likewise
+  // null until the bootstrap settles, so the loading window is unchanged.
+  const { user } = useAuth();
 
   // ✅ Check if user is super_admin
-  const isSuperAdmin = userRole === 'super_admin';
+  const isSuperAdmin = user?.role === 'super_admin';
 
   // Apply protection only if NOT super_admin
   useCopyProtection(

@@ -1,26 +1,30 @@
+const REPORTS_GAS_URL =
+  "https://script.google.com/macros/s/AKfycbw9IFX4CuVlHbcC2PUbNpp1ZwEmJU5oVgLKwhS6LFJqd3NDm-z-Dzgl9UZUq6YDoNmb/exec"
+const UPSTREAM_TIMEOUT_MS = 20_000
+
 export async function GET() {
+  // One budget covers both the upstream fetch and the JSON body read.
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), UPSTREAM_TIMEOUT_MS)
+
   try {
-    const apiUrl =
-      "https://script.google.com/macros/s/AKfycbw9IFX4CuVlHbcC2PUbNpp1ZwEmJU5oVgLKwhS6LFJqd3NDm-z-Dzgl9UZUq6YDoNmb/exec"
-
-    console.log("[v0] Fetching weekly reports from:", apiUrl)
-
-    const response = await fetch(apiUrl, {
+    const response = await fetch(REPORTS_GAS_URL, {
       headers: {
         Accept: "application/json",
       },
       redirect: "follow",
+      signal: controller.signal,
     })
 
     if (!response.ok) {
-      console.error("[v0] HTTP Error:", response.status, response.statusText)
+      console.error("[reports/weekly] upstream returned status", response.status)
     }
 
     let data
     try {
       data = await response.json()
-    } catch (jsonError) {
-      console.error("[v0] Failed to parse JSON response:", jsonError)
+    } catch {
+      console.error("[reports/weekly] upstream returned non-JSON body")
       return Response.json({ KTAHV: [], KAPPL: [] })
     }
 
@@ -56,18 +60,23 @@ export async function GET() {
       })
     }
 
-    console.log("[v0] Parsed KTAHV weekly data count:", ktahvData.length)
-    console.log("[v0] Parsed KAPPL weekly data count:", kapplData.length)
+    console.log("[reports/weekly] Parsed KTAHV weekly data count:", ktahvData.length)
+    console.log("[reports/weekly] Parsed KAPPL weekly data count:", kapplData.length)
 
     return Response.json({
       KTAHV: ktahvData,
       KAPPL: kapplData,
     })
   } catch (error: any) {
-    console.error("[v0] Error fetching weekly reports:", error.message)
-    return Response.json(
-      { error: "Failed to fetch weekly reports", details: error.message, KTAHV: [], KAPPL: [] },
-      { status: 200 }, // Return 200 even on error to avoid client-side error handling
-    )
+    if (error?.name === "AbortError") {
+      console.error("[reports/weekly] upstream request timed out")
+    } else {
+      console.error("[reports/weekly] upstream request failed")
+    }
+
+    // Return 200 with empty datasets so report pages keep rendering.
+    return Response.json({ KTAHV: [], KAPPL: [] }, { status: 200 })
+  } finally {
+    clearTimeout(timeout)
   }
 }

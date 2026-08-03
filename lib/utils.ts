@@ -1,3 +1,4 @@
+
 import { clsx, type ClassValue } from 'clsx'
 import { twMerge } from 'tailwind-merge'
 
@@ -15,14 +16,14 @@ export const USER_NAME_MAPPINGS: Record<string, string> = {
 
 export function normalizeUserName(name: string | null | undefined): string {
   if (!name) return "";
-  
+
   const cleaned = name.trim().replace(/\s+/g, " ");
   const lower = cleaned.toLowerCase();
-  
+
   if (lower in USER_NAME_MAPPINGS) {
     return USER_NAME_MAPPINGS[lower];
   }
-  
+
   // Format as Title Case for standard normalization
   return cleaned
     .split(" ")

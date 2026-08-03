@@ -41,6 +41,13 @@ function applyDiscount(amount: number, discountType: string, discountValue: numb
   return baseAmount - clampedFlat;
 }
 
+function normalizeDiscountValue(discountType: string, discountValue: number): number {
+  if (discountType === 'percentage' || discountType === '%') {
+    return Math.min(100, Math.max(0, discountValue));
+  }
+  return Math.max(0, discountValue);
+}
+
 interface PricingProps {
   bookingType: 'individual' | 'group';
   currency: string;
@@ -372,15 +379,15 @@ export function useBookingPricing(props: PricingProps) {
     }
 
     // Discounts
-    const roomDiscountVal = parseFloat(roomDiscount) || 0;
+    const roomDiscountVal = normalizeDiscountValue(roomDiscountType, parseFloat(roomDiscount) || 0);
     const roomAfterDiscount = applyDiscount(totalRoomPrice, roomDiscountType, roomDiscountVal);
     const roomTotal = roomAfterDiscount;
 
-    const foodDiscountVal = parseFloat(foodDiscount) || 0;
+    const foodDiscountVal = normalizeDiscountValue(foodDiscountType, parseFloat(foodDiscount) || 0);
     const foodAfterDiscount = applyDiscount(totalMealPrice, foodDiscountType, foodDiscountVal);
     const foodTotal = foodAfterDiscount;
 
-    const treatmentDiscountVal = parseFloat(treatmentDiscount) || 0;
+    const treatmentDiscountVal = normalizeDiscountValue(treatmentDiscountType, parseFloat(treatmentDiscount) || 0);
     const treatmentAfterDiscount = applyDiscount(totalPackagePrice, treatmentDiscountType, treatmentDiscountVal);
     const treatmentTotal = treatmentAfterDiscount;
 
@@ -390,12 +397,12 @@ export function useBookingPricing(props: PricingProps) {
     // Subtotal after individual component discounts
     const subtotalBeforeSubDiscount = treatmentTotal + roomTotal + foodTotal + totalChildPrice;
 
-    const subTotalDiscountVal = parseFloat(subTotalDiscount) || 0;
+    const subTotalDiscountVal = normalizeDiscountValue(subTotalDiscountType, parseFloat(subTotalDiscount) || 0);
     const subtotal = applyDiscount(subtotalBeforeSubDiscount, subTotalDiscountType, subTotalDiscountVal);
 
     // Transportation
     const tptCost = parseFloat(transportationCost) || 0;
-    const tptDiscountVal = parseFloat(transportationDiscount) || 0;
+    const tptDiscountVal = normalizeDiscountValue(transportationDiscountType, parseFloat(transportationDiscount) || 0);
     const tptTotal = applyDiscount(tptCost, transportationDiscountType, tptDiscountVal);
 
     // Other service charges
@@ -404,9 +411,13 @@ export function useBookingPricing(props: PricingProps) {
 
     otherCharges.forEach((charge) => {
       const amt = parseFloat(charge.amount) || 0;
-      const discVal = parseFloat(charge.discount) || 0;
+      const discVal = normalizeDiscountValue('%', parseFloat(charge.discount) || 0);
       otherChargesBeforeDiscount += amt;
-      otherChargesTotal += parseFloat(charge.total) || applyDiscount(amt, '%', discVal);
+      const providedTotal = parseFloat(charge.total);
+      const computedTotal = applyDiscount(amt, '%', discVal);
+      otherChargesTotal += Number.isFinite(providedTotal)
+        ? Math.max(0, Math.min(amt, providedTotal))
+        : computedTotal;
     });
 
     const finalTotalBeforeGrandDiscount = subtotal + tptTotal + otherChargesTotal;
@@ -414,7 +425,7 @@ export function useBookingPricing(props: PricingProps) {
     const grandTotalBeforeDiscount =
       subTotalRate + tptCost + otherChargesBeforeDiscount;
 
-    const grandTotalDiscountVal = parseFloat(grandTotalDiscount) || 0;
+    const grandTotalDiscountVal = normalizeDiscountValue(grandTotalDiscountType, parseFloat(grandTotalDiscount) || 0);
     let grandTotal = applyDiscount(finalTotalBeforeGrandDiscount, grandTotalDiscountType, grandTotalDiscountVal);
     let discountPercentage = 0;
     if (grandTotalBeforeDiscount > 0) {
@@ -429,6 +440,7 @@ export function useBookingPricing(props: PricingProps) {
       grandTotal = 0;
       discountPercentage = 100;
     }
+    discountPercentage = Math.min(100, Math.max(0, discountPercentage));
 
     const breakdown: PaymentBreakdown = {
       currency,
@@ -472,7 +484,7 @@ export function useBookingPricing(props: PricingProps) {
       // Flat Other Amount fields for the invoice
       otherAmountDescription: (otherAmountDescription || '').slice(0, 40),
       otherAmountRate: (parseFloat(otherAmountRate || '0') || 0).toFixed(2),
-      otherAmountDiscount: (parseFloat(otherAmountDiscountFlat || '0') || 0).toFixed(2),
+      otherAmountDiscount: normalizeDiscountValue(otherAmountDiscountType || '%', parseFloat(otherAmountDiscountFlat || '0') || 0).toFixed(2),
       otherAmountDiscountType: otherAmountDiscountType || '%',
       otherAmountTotal: otherChargesTotal.toFixed(2),
 

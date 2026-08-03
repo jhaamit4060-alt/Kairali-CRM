@@ -66,6 +66,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useRef } from "react"
 import Loader from "@/components/Loader"
 import { registerLeadsMemoryCacheReset, LEADS_CACHE_CLEARED_EVENT } from "@/lib/leads-cache-control"
+import { normalizeVSrc, normalizeVSrcKey } from "@/lib/lead-source"
+import { parseCRMDate, formatIST } from "@/lib/lead-date"
+import { formatDelay, delayColor } from "@/lib/lead-delay"
+import { sanitizeIvrUrl } from "@/lib/lead-media"
+import { PField } from "@/components/lead-detail-field"
 interface CallHistory {
   id: string
   callDate: string
@@ -75,122 +80,6 @@ interface CallHistory {
   duration: string
 }
 
-
-const sanitizeIvrUrl = (url: string | null | undefined): string | null => {
-  if (!url || typeof url !== 'string') return null;
-
-  // Trim whitespace
-  const trimmedUrl = url.trim();
-
-  // Check if empty or common placeholder after trimming
-  if (!trimmedUrl || trimmedUrl === '' || trimmedUrl === 'N/A' || trimmedUrl === '—' || trimmedUrl === '-') return null;
-
-  // If URL already has protocol, return it
-  if (trimmedUrl.startsWith('http://') || trimmedUrl.startsWith('https://')) {
-    return trimmedUrl;
-  }
-
-  // Add https:// protocol if missing
-  return `https://${trimmedUrl}`;
-};
-
-// Parse "DD/MM/YYYY HH:MM:SS" — JS new Date() misreads DD as MM for this format
-function parseCRMDate(str: string): number {
-  if (!str) return 0
-  const [datePart, timePart = '00:00:00'] = str.split(' ')
-  const parts = datePart.split('/')
-  if (parts.length !== 3) return new Date(str).getTime()
-  const [dd, mm, yyyy] = parts
-  return new Date(`${yyyy}-${mm}-${dd}T${timePart}`).getTime()
-}
-
-type NormalizedVSrc = { key: string; label: string }
-
-const titleCaseWords = (value: string): string =>
-  value
-    .split(" ")
-    .filter(Boolean)
-    .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
-    .join(" ")
-
-// All values that should merge into the "Others" bucket (blank vSrc, DB nulls, placeholder strings)
-const OTHERS_LIKE = new Set(["others", "other", "null", "undefined", "n/a", "na", "none", "-", "—"])
-
-const normalizeVSrcKey = (raw: unknown): string => {
-  if (typeof raw !== "string") return "OTHERS"
-  const cleaned = raw.trim().replace(/\s+/g, " ")
-  if (!cleaned || OTHERS_LIKE.has(cleaned.toLowerCase())) return "OTHERS"
-  return cleaned.toUpperCase()
-}
-
-const normalizeVSrc = (raw: unknown): NormalizedVSrc => {
-  const str = (typeof raw === "string") ? raw : String(raw || "")
-  const cleaned = str.trim().replace(/\s+/g, " ")
-  if (!cleaned || OTHERS_LIKE.has(cleaned.toLowerCase())) {
-    return { key: "OTHERS", label: "Others" }
-  }
-  const key = cleaned.toUpperCase()
-  // If the raw string is all uppercase and longer than 3 chars, Title Case it for the label.
-  // This fixes "FACEBOOK" -> "Facebook" while keeping "IVR" or mixed case "AI-Web".
-  let label = (cleaned === key && cleaned.length > 3) ? titleCaseWords(cleaned) : cleaned
-
-  // ✅ Specific formatting for AI and Whatsapp
-  label = label
-    .replace(/\bAi\b/g, "AI")
-    .replace(/\bWhatsapp\b/gi, "Whatsapp") // Follow user request: "Whatsapp" (capital W, lower a)
-    .replace(/\bWhatsapp\b/g, "Whatsapp")
-
-  return { key, label }
-}
-
-const PField = ({
-  label,
-  value,
-  highlight = false,
-}: {
-  label: string
-  value?: string | null
-  highlight?: boolean
-}) => (
-  <div className="min-w-0">
-    <p style={{
-      fontSize: '11px',
-      fontWeight: 600,
-      textTransform: 'uppercase',
-      letterSpacing: '0.06em',
-      color: '#94a3b8',
-      marginBottom: '3px',
-      lineHeight: 1
-    }}>
-      {label}
-    </p>
-    <p style={{
-      fontSize: '13px',
-      fontWeight: highlight ? 600 : 400,
-      color: highlight ? '#b45309' : (value ? '#1e293b' : '#94a3b8'),
-      fontStyle: value ? 'normal' : 'italic',
-      wordBreak: 'break-word',
-      lineHeight: 1.5
-    }}>
-      {value || '—'}
-    </p>
-  </div>
-)
-
-const formatDelay = (seconds: number) => {
-  if (seconds <= 0) return "00:00:00";
-  const h = Math.floor(seconds / 3600);
-  const m = Math.floor((seconds % 3600) / 60);
-  const s = Math.floor(seconds % 60);
-  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
-};
-
-const delayColor = (seconds: number) => {
-  const mins = seconds / 60;
-  if (mins <= 30) return { bg: "bg-green-50", border: "border-green-200", text: "text-green-700" };
-  if (mins <= 60) return { bg: "bg-orange-50", border: "border-orange-200", text: "text-orange-700" };
-  return { bg: "bg-red-50", border: "border-red-200", text: "text-red-700" };
-};
 
 const CACHE_EXPIRY_MS = 10 * 60 * 1000; // 10 minutes cache validity
 const globalLeadsCache = new Map<string, { timestamp: number, data: any[] }>();
@@ -1201,14 +1090,6 @@ export default function LeadAssignmentPage() {
 
   // ── SINGLE SOURCE OF TRUTH: dateFilter → compute dates → fetch directly ──
   // Removes intermediate startDate/endDate chain which had race conditions
-
-  const formatIST = (date: Date): string => {
-    const ist = new Date(date.toLocaleString("en-US", { timeZone: "Asia/Kolkata" }));
-    const y = ist.getFullYear();
-    const m = String(ist.getMonth() + 1).padStart(2, "0");
-    const d = String(ist.getDate()).padStart(2, "0");
-    return `${y}-${m}-${d}`;
-  };
 
   const computeDatesForFilter = (filter: string) => {
     const now = new Date()

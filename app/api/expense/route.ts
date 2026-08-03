@@ -73,13 +73,13 @@ export async function GET(req: NextRequest) {
       totalRows: rows.length,
     })
 
-  } catch (error: any) {
-    console.error('[expense API] Error:', error)
+  } catch {
+    console.error('[expense] expense lookup failed')
 
     return NextResponse.json(
       {
         success: false,
-        error: error.message || 'Failed to fetch expense data'
+        error: 'Failed to fetch expense data'
       },
       { status: 500 }
     )

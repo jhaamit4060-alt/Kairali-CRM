@@ -68,10 +68,10 @@ export async function GET(req: NextRequest) {
       totalRows: rows.length,
     })
 
-  } catch (error: any) {
-    console.error('[total-traffic API] Error:', error)
+  } catch {
+    console.error('[total-traffic] traffic lookup failed')
     return NextResponse.json(
-      { success: false, error: error.message || 'Failed to fetch traffic data' },
+      { success: false, error: 'Failed to fetch traffic data' },
       { status: 500 }
     )
   }

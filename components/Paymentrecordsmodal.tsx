@@ -17,7 +17,7 @@ interface PaymentRecord {
     payment_mode: string;
     pending_amount: number;
     remarks: string;
-    collection_id : string;
+    collection_id: string;
 }
 
 const getCurrencySymbol = (currencyCode?: string) => {
@@ -234,10 +234,10 @@ export default function PaymentRecordsModal({
                                         : uniqueCurrencies.length === 0
                                             ? `${getCurrencySymbol("INR")}0`
                                             : uniqueCurrencies.length > 1
-                                            ? `${uniqueCurrencies
-                                                .map((currencyCode) => `${getCurrencySymbol(currencyCode)}${(totalReceivedByCurrency[currencyCode] || 0).toLocaleString("en-IN")} ${currencyCode}`)
-                                                .join(" | ")}`
-                                            : `${totalReceived.toLocaleString("en-IN")} (mixed currencies)`}
+                                                ? `${uniqueCurrencies
+                                                    .map((currencyCode) => `${getCurrencySymbol(currencyCode)}${(totalReceivedByCurrency[currencyCode] || 0).toLocaleString("en-IN")} ${currencyCode}`)
+                                                    .join(" | ")}`
+                                                : `${totalReceived.toLocaleString("en-IN")} (mixed currencies)`}
                             </span>
                         </div>
                     </div>

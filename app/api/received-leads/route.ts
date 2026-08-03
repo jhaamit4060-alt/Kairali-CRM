@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getPool } from "@/lib/db";
-import { verifySessionCookieValue } from "@/lib/session";
+import { getSessionUserResult, hasAdminRole, hasAnyPermission } from "@/lib/authz";
 import fs from "fs";
 import path from "path";
 import os from "os";
@@ -18,12 +18,17 @@ const noStoreHeaders = {
 const MAX_SCAN_ROWS = 200000;
 const MAX_HISTORY_ROWS = 200000;
 
+// The same rule, now read through `lib/authz.ts` instead of hand-rolled here.
+// `hasAnyPermission` honours the `all` wildcard, which is exactly the
+// `permissions.includes("all")` test it replaces, and it applies the same
+// non-array-becomes-`[]` guard. `'lower'` is this route's own coercion —
+// `String(user?.role || "").toLowerCase()`, deliberately *without* a trim, so
+// ` admin ` is still rejected here as it always has been. Nothing folds; the
+// folding `normalizeRole` remains owner-gated (matrix M9, D1).
 function hasReceivedLeadsAccess(user: any): boolean {
-    const permissions = Array.isArray(user?.permissions) ? user.permissions : [];
     return (
-        permissions.includes("all") ||
-        permissions.includes("ai_voice_received.view") ||
-        ["super_admin", "admin"].includes(String(user?.role || "").toLowerCase())
+        hasAnyPermission(user, ["ai_voice_received.view"]) ||
+        hasAdminRole(user, "lower")
     );
 }
 
@@ -158,22 +163,25 @@ function mapRow(row: any): object {
 
 export async function GET(request: NextRequest) {
     try {
-        const userCookie = request.cookies.get("kairali_user")?.value;
+        // Same cookie, same verifier as before; the result keeps "no cookie" and
+        // "cookie did not verify" apart so the two 401 bodies below stay distinct.
+        const session = getSessionUserResult(request);
 
-        if (!userCookie) {
+        if (session.state === "missing") {
             return NextResponse.json(
                 { success: false, error: "Access denied: Not logged in" },
                 { status: 401, headers: noStoreHeaders }
             );
         }
 
-        const user = verifySessionCookieValue(userCookie);
-        if (!user) {
+        if (session.state === "invalid") {
             return NextResponse.json(
                 { success: false, error: "Access denied: Invalid session" },
                 { status: 401, headers: noStoreHeaders }
             );
         }
+
+        const user = session.user;
 
         if (!hasReceivedLeadsAccess(user)) {
             return NextResponse.json(

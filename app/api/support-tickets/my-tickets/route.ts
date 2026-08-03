@@ -20,8 +20,8 @@ export async function GET(req: NextRequest) {
         )
 
         return NextResponse.json({ tickets: rows })
-    } catch (err: any) {
-        console.error('[my-tickets] error:', err)
-        return NextResponse.json({ error: 'Failed to fetch tickets', detail: err.message }, { status: 500 })
+    } catch {
+        console.error('[my-tickets] ticket lookup failed')
+        return NextResponse.json({ error: 'Failed to fetch tickets' }, { status: 500 })
     }
 }
