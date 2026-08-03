@@ -244,8 +244,8 @@ export async function GET(req: NextRequest) {
                     roomCategory: r.room_category,
                 },
                 programeName: r.prog_pkg_name,
-                arrivalDate: r.arrival_date ? new Date(r.arrival_date).toLocaleDateString("en-IN", { day: "2-digit", month: "long", year: "numeric" }) : "-",
-                departureDate: r.departure_date ? new Date(r.departure_date).toLocaleDateString("en-IN", { day: "2-digit", month: "long", year: "numeric" }) : "-",
+                arrivalDate: r.arrival_date ? new Date(r.arrival_date).toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata", day: "2-digit", month: "long", year: "numeric" }) : "-",
+                departureDate: r.departure_date ? new Date(r.departure_date).toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata", day: "2-digit", month: "long", year: "numeric" }) : "-",
                 paymentDetails: {
                     amount: convertedAmt ? Math.round(convertedAmt) : convertedAmt,
                     amountOriginal: invoiceAmtRaw ? Math.round(invoiceAmtRaw) : invoiceAmtRaw,
@@ -960,6 +960,21 @@ function parseDeadlineDate(value: unknown): Date | null {
     return isNaN(fallback.getTime()) ? null : fallback;
 }
 
+function getISTParts(d: Date): Record<string, string> {
+    const formatter = new Intl.DateTimeFormat("en-US", {
+        timeZone: "Asia/Kolkata",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        hour12: false,
+    });
+    const parts = formatter.formatToParts(d);
+    return Object.fromEntries(parts.map(p => [p.type, p.value]));
+}
+
 function parseIndianDateTime(value: unknown): string | null {
     let d: Date | null = null;
 
@@ -988,8 +1003,8 @@ function parseIndianDateTime(value: unknown): string | null {
     }
 
     if (!d) return null;
-    const pad = (n: number) => String(n).padStart(2, "0");
-    return `${pad(d.getMonth() + 1)}/${pad(d.getDate())}/${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+    const map = getISTParts(d);
+    return `${map.month}/${map.day}/${map.year} ${map.hour}:${map.minute}:${map.second}`;
 }
 
 function parseIndianDateTimeatual(value: unknown): string | null {
@@ -1020,6 +1035,6 @@ function parseIndianDateTimeatual(value: unknown): string | null {
     }
 
     if (!d) return null;
-    const pad = (n: number) => String(n).padStart(2, "0");
-    return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+    const map = getISTParts(d);
+    return `${map.day}/${map.month}/${map.year} ${map.hour}:${map.minute}:${map.second}`;
 }
