@@ -1430,6 +1430,7 @@ export default function BookingForm({ bookingId, formType = "individual", onSucc
         res_id: finalResId,
         groupInfo,
         groupGuests: formattedGroupGuests,
+        
       }),
       additionalInfo,
       travelAgent,
@@ -1444,7 +1445,8 @@ export default function BookingForm({ bookingId, formType = "individual", onSucc
       const isSmallPayload = payloadStr.length < 60000;
       let res: Response | null = null;
       let timedOut = false;
-
+      console.log(payloadStr);
+      debugger;
       if (isSmallPayload) {
         // Use keepalive so the request finishes in the background even if the page redirects
         const fetchPromise = fetch(SUBMIT_API, {

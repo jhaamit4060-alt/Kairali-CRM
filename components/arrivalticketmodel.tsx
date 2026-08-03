@@ -1,6 +1,5 @@
-import React, { useState, useMemo } from "react";
+import React, { useState } from "react";
 import { Repeat, X, Upload, Check, Send } from "lucide-react";
-import { compressImage } from "../lib/image-compress";
 import { useAuth } from "@/hooks/use-auth";
 
 const DOCTORS = ["Dr Deepu John", "Dr. Rahul R", "Ashika Raj", "Dr. Akhila Oommen"];
@@ -200,52 +199,29 @@ export default function ArrivalTicketsModal({ open = true, booking = null as any
         package: booking?.programmeName || "",
     };
 
-    // Gate: the stage remains locked until arrival_planned is filled.
+    // Gate: arrival_planned must be set before the form is usable
     const arrivalPlanned = guestTrackerData?.arrivalstage?.arrival_planned ?? "";
-    const isPlanned = typeof arrivalPlanned === "string" ? arrivalPlanned.trim() !== "" : !!arrivalPlanned;
+    const isPlanned = Boolean(
+        arrivalPlanned && String(arrivalPlanned).trim() !== "" && String(arrivalPlanned).trim() !== "null"
+    );
 
-    const existsInTracker = guestTrackerData?.exists ?? false;
-
-    // Lock form if actual check-in (arrival_actual) is completed OR if today's date is strictly after check-in date
-    const isLockedAfterCheckin = useMemo(() => {
-        if (guestTrackerData?.arrivalstage?.arrival_actual) return true;
+    // Gate: once check-in date has arrived/passed (today >= checkIn date), arrival form locks
+    const isLockedAfterCheckin = (() => {
         if (!booking?.checkIn) return false;
-        try {
-            const checkinDate = new Date(booking.checkIn);
-            if (isNaN(checkinDate.getTime())) return false;
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const checkInDate = new Date(booking.checkIn);
+        checkInDate.setHours(0, 0, 0, 0);
+        return today >= checkInDate;
+    })();
 
-            const today = new Date();
-            today.setHours(0, 0, 0, 0);
-            checkinDate.setHours(0, 0, 0, 0);
+    console.log("Is person checkin", isLockedAfterCheckin);
 
-            return today > checkinDate;
-        } catch (e) {
-            return false;
-        }
-    }, [booking?.checkIn, guestTrackerData?.arrivalstage?.arrival_actual]);
-
-    const isLocked = !existsInTracker || !isPlanned || isLockedAfterCheckin;
-
-    const stage = guestTrackerData?.arrivalstage;
-    const isAlreadySubmitted = isLocked ||
-        stage?.client_arrival_data_upload_status === "Pickup Required" ||
-        stage?.client_arrival_data_upload_status === "Not Required" ||
-        stage?.client_arrival_data_upload_status === "Completed" ||
-        !!stage?.arrival_tickets_upload_link ||
-        !!stage?.arrival_actual;
-
-    const [pickupRequired, setPickupRequired] = useState(() => {
-        if (stage?.client_arrival_data_upload_status === "Pickup Required" || stage?.arrival_tickets_upload_link) return "yes";
-        if (stage?.client_arrival_data_upload_status === "Not Required") return "no";
-        return "";
-    });
+    const [pickupRequired, setPickupRequired] = useState("");
     const [arrivalTicketFile, setArrivalTicketFile] = useState<File | null>(null);
-    const [uploadRemarks, setUploadRemarks] = useState(stage?.client_arrival_data_upload_remarks || "");
+    const [uploadRemarks, setUploadRemarks] = useState("");
 
-    const [assignedDoctor, setAssignedDoctor] = useState(() => {
-        const doc = stage?.confirm_guest_requests_doctor || "";
-        return doc.startsWith("http") ? "" : doc;
-    });
+    const [assignedDoctor, setAssignedDoctor] = useState("");
     const [wheelchair, setWheelchair] = useState("");
     const [specialRequest, setSpecialRequest] = useState("");
 
@@ -253,21 +229,6 @@ export default function ArrivalTicketsModal({ open = true, booking = null as any
     const [boardingRemarks, setBoardingRemarks] = useState("");
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [submitError, setSubmitError] = useState<string | null>(null);
-
-    React.useEffect(() => {
-        if (stage) {
-            if (stage.client_arrival_data_upload_status === "Pickup Required" || stage.arrival_tickets_upload_link) {
-                setPickupRequired("yes");
-            } else if (stage.client_arrival_data_upload_status === "Not Required") {
-                setPickupRequired("no");
-            } else {
-                setPickupRequired("");
-            }
-            setUploadRemarks(stage.client_arrival_data_upload_remarks || "");
-            const doc = stage.confirm_guest_requests_doctor || "";
-            setAssignedDoctor(doc.startsWith("http") ? "" : doc);
-        }
-    }, [stage]);
 
     if (!open) return null;
 
@@ -410,7 +371,7 @@ export default function ArrivalTicketsModal({ open = true, booking = null as any
                                 Arrival Tickets Upload
                             </p>
                             <p style={{ color: "rgba(255,255,255,0.8)", fontSize: 13, margin: "2px 0 0" }}>
-                                {arrivalPlanned ? `Planned: ${formatDate(arrivalPlanned)}` : "Complete all fields to proceed"}
+                                {isPlanned ? `Planned: ${formatDate(arrivalPlanned)}` : "Complete all fields to proceed"}
                             </p>
                         </div>
                     </div>
@@ -460,214 +421,163 @@ export default function ArrivalTicketsModal({ open = true, booking = null as any
                         </div>
                     </div>
 
-                    {/* Banners */}
-                    {!existsInTracker && (
+                    {/* ── NOT PLANNED YET — show locked banner, hide the form ── */}
+                    {!isPlanned ? (
+                        <div
+                            style={{
+                                background: "#fef9ee",
+                                border: "1.5px solid #fbbf24",
+                                borderRadius: 14,
+                                padding: "28px 24px",
+                                textAlign: "center",
+                                marginBottom: 20,
+                            }}
+                        >
+                            <div style={{ fontSize: 40, marginBottom: 12 }}>🔒</div>
+                            <p style={{ fontSize: 16, fontWeight: 700, color: "#92400e", margin: "0 0 8px" }}>
+                                Arrival Stage Not Scheduled Yet
+                            </p>
+                            <p style={{ fontSize: 13, color: "#a16207", margin: 0, maxWidth: 480, marginInline: "auto" }}>
+                                This form will be enabled once the arrival stage has been planned in the Guest Tracker.
+                                Please contact the responsible team to schedule the planned date first.
+                            </p>
+                        </div>
+                    ) : isLockedAfterCheckin ? (
                         <div
                             style={{
                                 background: "#fef2f2",
                                 border: "1.5px solid #fca5a5",
                                 borderRadius: 14,
-                                padding: "20px 24px",
+                                padding: "28px 24px",
                                 textAlign: "center",
                                 marginBottom: 20,
                             }}
                         >
-                            <div style={{ fontSize: 32, marginBottom: 8 }}>🔒</div>
-                            <p style={{ fontSize: 15, fontWeight: 700, color: "#991b1b", margin: "0 0 6px" }}>
-                                Form Locked (Booking ID Missing)
+                            <div style={{ fontSize: 40, marginBottom: 12 }}>🔒</div>
+                            <p style={{ fontSize: 16, fontWeight: 700, color: "#991b1b", margin: "0 0 8px" }}>
+                                Arrival Form Locked
                             </p>
-                            <p style={{ fontSize: 13, color: "#b91c1c", margin: 0, maxWidth: 640, marginInline: "auto" }}>
-                                This form is locked because the Booking ID is not present in the Guest Tracker Master Sheet. Please add the Booking ID to the Guest Tracker Master Sheet before updating Arrival/Departure Flight Details.
-                            </p>
-                        </div>
-                    )}
-
-                    {existsInTracker && isLockedAfterCheckin && (
-                        <div
-                            style={{
-                                background: "#fef2f2",
-                                border: "1.5px solid #fca5a5",
-                                borderRadius: 14,
-                                padding: "20px 24px",
-                                textAlign: "center",
-                                marginBottom: 20,
-                            }}
-                        >
-                            <div style={{ fontSize: 32, marginBottom: 8 }}>🔒</div>
-                            <p style={{ fontSize: 15, fontWeight: 700, color: "#991b1b", margin: "0 0 6px" }}>
-                                Arrival Flight Details Locked
-                            </p>
-                            <p style={{ fontSize: 13, color: "#b91c1c", margin: 0, maxWidth: 640, marginInline: "auto" }}>
-                                Arrival Flight Details can only be updated before the guest's check-in. Since the check-in has already been completed, this form is now locked.
+                            <p style={{ fontSize: 13, color: "#b91c1c", margin: 0, maxWidth: 480, marginInline: "auto" }}>
+                                This guest has already checked in, so the arrival form can no longer be filled.
+                                It could only be completed on or before the scheduled check-in date.
                             </p>
                         </div>
-                    )}
-
-                    {existsInTracker && !isLockedAfterCheckin && !isPlanned && (
-                        <div
-                            style={{
-                                background: "#f8fafc",
-                                border: "1.5px solid #cbd5e1",
-                                borderRadius: 14,
-                                padding: "20px 24px",
-                                textAlign: "center",
-                                marginBottom: 20,
-                            }}
-                        >
-                            <div style={{ fontSize: 32, marginBottom: 8 }}>🔒</div>
-                            <p style={{ fontSize: 15, fontWeight: 700, color: "#334155", margin: "0 0 6px" }}>
-                                Arrival Flight Details Locked
-                            </p>
-                            <p style={{ fontSize: 13, color: "#475569", margin: 0, maxWidth: 640, marginInline: "auto" }}>
-                                This stage is locked until arrival planned is filled.
-                            </p>
-                        </div>
-                    )}
-
-                    <>
-                        {/* Section 1: Pickup */}
-                        <SectionWrapper theme={SECTION_THEMES.pickup}>
-                            <SectionHeader title="Pickup Details" color={SECTION_THEMES.pickup.head} />
-                            <div style={{ marginBottom: pickupRequired === "yes" ? 16 : 0 }}>
-                                <Label>Pickup Required?</Label>
-                                <select style={selectStyle} disabled={isAlreadySubmitted} value={pickupRequired} onChange={(e) => setPickupRequired(e.target.value)}>
-                                    <option value="">Select an option</option>
-                                    <option value="yes">Yes</option>
-                                    <option value="no">No</option>
-                                </select>
-                            </div>
-
-                            {pickupRequired === "yes" && (
-                                <>
-                                    <div style={{ ...row2, marginBottom: 16 }}>
-                                        <div>
-                                            <Label>Arrival Tickets</Label>
-                                            {isAlreadySubmitted ? (
-                                                stage?.arrival_tickets_upload_link ? (
-                                                    <div style={readonlyBoxStyle}>
-                                                        <a href={stage.arrival_tickets_upload_link} target="_blank" rel="noopener noreferrer" style={{ color: "#6259d6", fontWeight: 600, textDecoration: "underline" }}>
-                                                            ↗ View Ticket
-                                                        </a>
-                                                    </div>
-                                                ) : (
-                                                    <div style={readonlyBoxStyle}>No Ticket Uploaded</div>
-                                                )
-                                            ) : (
-                                                <UploadBox id="arrival-ticket-upload" file={arrivalTicketFile} onChange={setArrivalTicketFile} />
-                                            )}
-                                        </div>
-                                        <div>
-                                            <Label>Uploaded By</Label>
-                                            <div style={readonlyBoxStyle}>{stage?.arrival_doer_name || currentUser}</div>
-                                        </div>
-                                    </div>
-                                    <div>
-                                        <Label>Upload Remarks</Label>
-                                        <textarea
-                                            style={textareaStyle}
-                                            disabled={isAlreadySubmitted}
-                                            placeholder={isAlreadySubmitted ? "—" : "Enter remarks..."}
-                                            value={uploadRemarks}
-                                            onChange={(e) => setUploadRemarks(e.target.value)}
-                                        />
-                                    </div>
-                                </>
-                            )}
-
-                            {pickupRequired === "no" && (
-                                <div
-                                    style={{
-                                        marginTop: 12,
-                                        display: "flex",
-                                        alignItems: "center",
-                                        gap: 8,
-                                        fontSize: 13,
-                                        color: "#6b7280",
-                                        background: "#e5e7eb",
-                                        borderRadius: 10,
-                                        padding: "10px 12px",
-                                    }}
-                                >
-                                    <Check size={14} color="#16a34a" />
-                                    Pickup not required — saved to the booking record.
-                                </div>
-                            )}
-                        </SectionWrapper>
-
-                        {/* Section 2: Guest Requests & Doctor */}
-                        <SectionWrapper theme={SECTION_THEMES.guest}>
-                            <SectionHeader title="Confirm Guest Requests & Doctor" color={SECTION_THEMES.guest.head} />
-                            <div style={{ ...row2, marginBottom: 16 }}>
-                                <div>
-                                    <Label>Please Assign Doctor</Label>
-                                    <select style={selectStyle} disabled={isAlreadySubmitted} value={assignedDoctor} onChange={(e) => setAssignedDoctor(e.target.value)}>
-                                        <option value="">Select doctor</option>
-                                        {DOCTORS.map((doc) => (
-                                            <option key={doc} value={doc}>
-                                                {doc}
-                                            </option>
-                                        ))}
-                                        {isAlreadySubmitted && assignedDoctor && !DOCTORS.includes(assignedDoctor) && (
-                                            <option value={assignedDoctor}>{assignedDoctor}</option>
-                                        )}
-                                    </select>
-                                </div>
-                                <div>
-                                    <Label>Wheel Chair Requirement?</Label>
-                                    <select style={selectStyle} disabled={isAlreadySubmitted} value={wheelchair} onChange={(e) => setWheelchair(e.target.value)}>
+                    ) : (
+                        <>
+                            {/* Section 1: Pickup */}
+                            <SectionWrapper theme={SECTION_THEMES.pickup}>
+                                <SectionHeader title="Pickup Details" color={SECTION_THEMES.pickup.head} />
+                                <div style={{ marginBottom: pickupRequired === "yes" ? 16 : 0 }}>
+                                    <Label>Pickup Required?</Label>
+                                    <select style={selectStyle} value={pickupRequired} onChange={(e) => setPickupRequired(e.target.value)}>
                                         <option value="">Select an option</option>
                                         <option value="yes">Yes</option>
                                         <option value="no">No</option>
                                     </select>
                                 </div>
-                            </div>
-                            <div>
-                                <Label>Any other special request/requirement by Guest?</Label>
-                                <textarea
-                                    style={textareaStyle}
-                                    disabled={isAlreadySubmitted}
-                                    placeholder={isAlreadySubmitted ? "—" : "Enter special request..."}
-                                    value={specialRequest}
-                                    onChange={(e) => setSpecialRequest(e.target.value)}
-                                />
-                            </div>
-                        </SectionWrapper>
 
-                        {/* Section 3: Boarding Pass - only relevant when pickup is required */}
-                        {pickupRequired === "yes" && (
-                            <SectionWrapper theme={SECTION_THEMES.boarding}>
-                                <SectionHeader title="Boarding Pass" color={SECTION_THEMES.boarding.head} />
-                                <div style={row2}>
+                                {pickupRequired === "yes" && (
+                                    <>
+                                        <div style={{ ...row2, marginBottom: 16 }}>
+                                            <div>
+                                                <Label>Upload Arrival Tickets</Label>
+                                                <UploadBox id="arrival-ticket-upload" file={arrivalTicketFile} onChange={setArrivalTicketFile} />
+                                            </div>
+                                            <div>
+                                                <Label>Uploaded By</Label>
+                                                <div style={readonlyBoxStyle}>{currentUser}</div>
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <Label>Upload Remarks</Label>
+                                            <textarea
+                                                style={textareaStyle}
+                                                placeholder="Enter remarks..."
+                                                value={uploadRemarks}
+                                                onChange={(e) => setUploadRemarks(e.target.value)}
+                                            />
+                                        </div>
+                                    </>
+                                )}
+
+                                {pickupRequired === "no" && (
+                                    <div
+                                        style={{
+                                            marginTop: 12,
+                                            display: "flex",
+                                            alignItems: "center",
+                                            gap: 8,
+                                            fontSize: 13,
+                                            color: "#6b7280",
+                                            background: "#e5e7eb",
+                                            borderRadius: 10,
+                                            padding: "10px 12px",
+                                        }}
+                                    >
+                                        <Check size={14} color="#16a34a" />
+                                        Pickup not required — this will be saved to the booking record.
+                                    </div>
+                                )}
+                            </SectionWrapper>
+
+                            {/* Section 2: Guest Requests & Doctor */}
+                            <SectionWrapper theme={SECTION_THEMES.guest}>
+                                <SectionHeader title="Confirm Guest Requests & Doctor" color={SECTION_THEMES.guest.head} />
+                                <div style={{ ...row2, marginBottom: 16 }}>
                                     <div>
-                                        <Label>Boarding Pass</Label>
-                                        {isAlreadySubmitted ? (
-                                            stage?.arrival_boarding_pass_upload_link ? (
-                                                <div style={readonlyBoxStyle}>
-                                                    <a href={stage.arrival_boarding_pass_upload_link} target="_blank" rel="noopener noreferrer" style={{ color: "#6259d6", fontWeight: 600, textDecoration: "underline" }}>
-                                                        ↗ View Boarding Pass
-                                                    </a>
-                                                </div>
-                                            ) : (
-                                                <div style={readonlyBoxStyle}>No Boarding Pass Uploaded</div>
-                                            )
-                                        ) : (
-                                            <UploadBox id="boarding-pass-upload" file={boardingPassFile} onChange={setBoardingPassFile} />
-                                        )}
+                                        <Label>Please Assign Doctor</Label>
+                                        <select style={selectStyle} value={assignedDoctor} onChange={(e) => setAssignedDoctor(e.target.value)}>
+                                            <option value="">Select doctor</option>
+                                            {DOCTORS.map((doc) => (
+                                                <option key={doc} value={doc}>
+                                                    {doc}
+                                                </option>
+                                            ))}
+                                        </select>
                                     </div>
                                     <div>
-                                        <Label>Upload Remarks</Label>
-                                        <textarea
-                                            style={{ ...textareaStyle, minHeight: 42 }}
-                                            disabled={isAlreadySubmitted}
-                                            placeholder={isAlreadySubmitted ? "—" : "Enter remarks..."}
-                                            value={boardingRemarks}
-                                            onChange={(e) => setBoardingRemarks(e.target.value)}
-                                        />
+                                        <Label>Wheel Chair Requirement?</Label>
+                                        <select style={selectStyle} value={wheelchair} onChange={(e) => setWheelchair(e.target.value)}>
+                                            <option value="">Select an option</option>
+                                            <option value="yes">Yes</option>
+                                            <option value="no">No</option>
+                                        </select>
                                     </div>
                                 </div>
+                                <div>
+                                    <Label>Any other special request/requirement by Guest?</Label>
+                                    <textarea
+                                        style={textareaStyle}
+                                        placeholder="Enter special request..."
+                                        value={specialRequest}
+                                        onChange={(e) => setSpecialRequest(e.target.value)}
+                                    />
+                                </div>
                             </SectionWrapper>
-                        )}
-                    </>
+
+                            {/* Section 3: Boarding Pass - only relevant when pickup is required */}
+                            {pickupRequired === "yes" && (
+                                <SectionWrapper theme={SECTION_THEMES.boarding}>
+                                    <SectionHeader title="Boarding Pass" color={SECTION_THEMES.boarding.head} />
+                                    <div style={row2}>
+                                        <div>
+                                            <Label>Upload Boarding Pass</Label>
+                                            <UploadBox id="boarding-pass-upload" file={boardingPassFile} onChange={setBoardingPassFile} />
+                                        </div>
+                                        <div>
+                                            <Label>Upload Remarks</Label>
+                                            <textarea
+                                                style={{ ...textareaStyle, minHeight: 42 }}
+                                                placeholder="Enter remarks..."
+                                                value={boardingRemarks}
+                                                onChange={(e) => setBoardingRemarks(e.target.value)}
+                                            />
+                                        </div>
+                                    </div>
+                                </SectionWrapper>
+                            )}
+                        </>
+                    )}
 
                     {/* Footer */}
                     <div style={{ display: "flex", gap: 12, flexDirection: "column" }}>
@@ -701,9 +611,9 @@ export default function ArrivalTicketsModal({ open = true, booking = null as any
                                     opacity: isSubmitting ? 0.5 : 1,
                                 }}
                             >
-                                {isAlreadySubmitted ? "Close" : "Cancel"}
+                                Cancel
                             </button>
-                            {isPlanned && !isLockedAfterCheckin && !isAlreadySubmitted && (
+                            {isPlanned && !isLockedAfterCheckin && (
                                 <button
                                     onClick={handleSubmit}
                                     disabled={!isValid() || isSubmitting}
@@ -736,26 +646,6 @@ export default function ArrivalTicketsModal({ open = true, booking = null as any
                                         <><Send size={15} /> Submit</>
                                     )}
                                 </button>
-                            )}
-                            {isAlreadySubmitted && (
-                                <div
-                                    style={{
-                                        flex: 2,
-                                        padding: "12px 0",
-                                        borderRadius: 12,
-                                        background: "#e5e7eb",
-                                        color: "#9ca3af",
-                                        fontSize: 14,
-                                        fontWeight: 700,
-                                        display: "flex",
-                                        alignItems: "center",
-                                        justifyContent: "center",
-                                        gap: 8,
-                                        cursor: "not-allowed",
-                                    }}
-                                >
-                                    🔒 {!existsInTracker ? "Locked (Missing Tracker)" : isLockedAfterCheckin ? "Locked (Check-in Completed)" : !isPlanned ? "Locked (Planned Missing)" : "Submitted & Locked"}
-                                </div>
                             )}
                         </div>
                     </div>

@@ -81,12 +81,12 @@ export async function GET(req: NextRequest) {
     // Acquire all connections up-front; released inside each helper's finally block
     const [
         conn1, conn2, paymentConn, accountsConn,
-        finaltrtfConn, deleteConn, credConn, pendConn, mainConn, guestconn
+        finaltrtfConn, deleteConn, credConn, pendConn, mainConn, guestconn, checkinconn
     ] = await Promise.all([
         pool.getConnection(), pool.getConnection(), pool.getConnection(),
         pool.getConnection(), pool.getConnection(), pool.getConnection(),
         pool.getConnection(), pool.getConnection(), pool.getConnection(),
-        pool.getConnection()
+        pool.getConnection(), pool.getConnection()
     ]);
 
     try {
@@ -100,7 +100,8 @@ export async function GET(req: NextRequest) {
             names,
             pendDataMap,
             newBookingData,
-            guesttrackerdata
+            guesttrackerdata,
+            checkinidmap
         ] = await Promise.all([
             getBookingMapsOptimized(conn1, conn2),
             getCollectionHistory(paymentConn),
@@ -110,7 +111,8 @@ export async function GET(req: NextRequest) {
             getNameMapResp(credConn),
             getPendingDataMap(pendConn),
             getMainBookingsData(mainConn),
-            getGuesttrackerData(guestconn)
+            getGuesttrackerData(guestconn),
+            getcheckinids(checkinconn)
         ]);
 
         const { piMap, autoReleasedMap, underAutoReleasedMap } = bookingMaps;
@@ -219,7 +221,8 @@ export async function GET(req: NextRequest) {
 
             const isAutoReleased = resId in autoReleasedMap;
             const isUnderAutoReleased = !isAutoReleased && !!underAutoReleaseDate?.status;
-            let guestrow = guesttrackerdata[resId]
+            let guestrow = guesttrackerdata[resId];
+            let checkinidexsist = resId in checkinidmap ? true : false;
             return [{
                 id: String(i + 1),
                 bookingDate: parseIndianDateTime(r.booking_datetime),
@@ -274,7 +277,7 @@ export async function GET(req: NextRequest) {
                     dataSource: r.data_source_auto,
                 },
                 piDetails: {
-                    piLink: resId in piMap && r.nb_bvs_pi_gen_status === "Edited" ? piMap[resId] : null,
+                    piLink: (resId in piMap && r.nb_bvs_pi_gen_status === "Edited" ? piMap[resId] : null) || r.nb_bvs_pi_link || null,
                     piNumber: r.nb_bvs_pi_number,
                 },
                 mlDetails: {
@@ -366,7 +369,10 @@ export async function GET(req: NextRequest) {
                         client_arrival_data_upload_remarks: guestrow?.client_arrival_data_upload_remarks ?? "",
                         arrival_boarding_pass_upload_datetime: guestrow?.arrival_boarding_pass_upload_datetime ?? "",
                         arrival_counts_st1: guestrow?.arrival_counts_st1 ?? "",
-                        booking_status_if_cancelled: guestrow?.booking_status_if_cancelled ?? ""
+                        booking_status_if_cancelled: guestrow?.booking_status_if_cancelled ?? "",
+                        doctor_assigned_to_the_client: guestrow?.doctor_assigned_to_the_client ?? "",
+                        special_request_or_requirement_noted: guestrow?.special_request_or_requirement_noted ?? "",
+                        wheel_chair_requirement_noted: guestrow?.wheel_chair_requirement_noted ?? ""
                     },
                     departurestage: {
                         departure_planned: guestrow?.departure_planned ?? "",
@@ -381,6 +387,7 @@ export async function GET(req: NextRequest) {
                         departure_counts_st1: guestrow?.departure_counts_st1 ?? ""
                     }
                 },
+                checkinidexsist:checkinidexsist,
                 amountConversionRatio: CONVERSION_RATES,
                 isEditedOneTime: r.nb_bvs_pi_gen_status === "Edited",
             }];
@@ -438,7 +445,20 @@ function buildPiMap(data: any[]): Record<string, string> {
     }
     return map;
 }
-
+async function getcheckinids(checkinconn: any) {
+    try {
+        const [checkinrows] = await checkinconn.execute(`SELECT booking_date_time , reservation_id  FROM ktahv_checkinmasterfms WHERE booking_date_time IS NOT NULL `);
+        let checkinidmap = {};
+        for (let i = 0; i < checkinrows.length; i++) {
+            let r = checkinrows[i];
+            if (!r.booking_date_time || !r.reservation_id) continue;
+            checkinidmap[String(r.reservation_id).trim()] = true;
+        }
+        return checkinidmap;
+    } finally {
+        checkinconn?.release();
+    }
+}
 function buildAutoAndUnderReleasedMap(data: any[]) {
     const autoReleasedMap: Record<string, any> = {};
     const underAutoReleasedMap: Record<string, any> = {};
@@ -723,7 +743,10 @@ async function getGuesttrackerData(guestconn: any): Promise<any[]> {
             gt.client_departure_data_upload_status,
             gt.client_departure_data_upload_remarks,
             gt.departure_boarding_pass_upload_datetime,
-            gt.departure_counts_st1
+            gt.departure_counts_st1,
+            gt.wheel_chair_requirement_noted,
+            gt.special_request_or_requirement_noted,
+            gt.doctor_assigned_to_the_client
             FROM ktahv_guest_tracker gt
             LEFT JOIN ktahv_bookings_fms_v3_part1 nb
             ON nb.reservation_id = gt.booking_id COLLATE utf8mb4_unicode_ci
@@ -754,7 +777,10 @@ async function getGuesttrackerData(guestconn: any): Promise<any[]> {
                 client_departure_data_upload_status: r.client_departure_data_upload_status,
                 client_departure_data_upload_remarks: r.client_departure_data_upload_remarks,
                 departure_boarding_pass_upload_datetime: r.departure_boarding_pass_upload_datetime,
-                departure_counts_st1: r.departure_counts_st1
+                departure_counts_st1: r.departure_counts_st1,
+                doctor_assigned_to_the_client: r.doctor_assigned_to_the_client,
+                special_request_or_requirement_noted: r.special_request_or_requirement_noted,
+                wheel_chair_requirement_noted: r.wheel_chair_requirement_noted
             }
 
         }

@@ -1,7 +1,6 @@
-import React, { useState, useMemo } from "react";
+import React, { useState } from "react";
 import { Repeat, X, Upload, Check, Send } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
-import { compressImage } from "../lib/image-compress";
 
 /** Format a raw date string (ISO or DD/MM/YYYY) into a readable form like "05 November 2026" */
 function formatDate(raw?: string): string {
@@ -197,65 +196,30 @@ export default function DepartureFlightModal({ open = true, booking = null as an
         package: booking?.programmeName || "",
     };
 
-    // Gate: the stage remains locked until departure_planned is filled.
+    // Gate: departure_planned must be set before the form is usable
     const departurePlanned = guestTrackerData?.departurestage?.departure_planned ?? "";
-    const isPlanned = typeof departurePlanned === "string" ? departurePlanned.trim() !== "" : !!departurePlanned;
+    const isPlanned = Boolean(
+        departurePlanned && String(departurePlanned).trim() !== "" && String(departurePlanned).trim() !== "null"
+    );
 
-    const existsInTracker = guestTrackerData?.exists ?? false;
-
-    // Lock form if actual checkout (departure_actual) is completed OR if today's date is strictly after checkout date
-    const isLockedAfterCheckout = useMemo(() => {
-        if (guestTrackerData?.departurestage?.departure_actual) return true;
+    // Gate: once check-out date has arrived/passed (today >= checkOut date), departure form locks
+    const isLockedAfterCheckout = (() => {
         if (!booking?.checkOut) return false;
-        try {
-            const checkoutDate = new Date(booking.checkOut);
-            if (isNaN(checkoutDate.getTime())) return false;
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const checkOutDate = new Date(booking.checkOut);
+        checkOutDate.setHours(0, 0, 0, 0);
+        return today >= checkOutDate;
+    })();
 
-            const today = new Date();
-            today.setHours(0, 0, 0, 0);
-            checkoutDate.setHours(0, 0, 0, 0);
-
-            return today > checkoutDate;
-        } catch (e) {
-            return false;
-        }
-    }, [booking?.checkOut, guestTrackerData?.departurestage?.departure_actual]);
-
-    const isLocked = !existsInTracker || !isPlanned || isLockedAfterCheckout;
-
-    const stage = guestTrackerData?.departurestage;
-    const isAlreadySubmitted = isLocked ||
-        stage?.client_departure_data_upload_status === "Drop Required" ||
-        stage?.client_departure_data_upload_status === "Not Required" ||
-        stage?.client_departure_data_upload_status === "Completed" ||
-        !!stage?.departure_tickets_upload_link ||
-        !!stage?.departure_actual;
-
-    const [dropRequired, setDropRequired] = useState(() => {
-        if (stage?.client_departure_data_upload_status === "Drop Required" || stage?.departure_tickets_upload_link) return "yes";
-        if (stage?.client_departure_data_upload_status === "Not Required") return "no";
-        return "";
-    });
+    const [dropRequired, setDropRequired] = useState("");
     const [departureTicketFile, setDepartureTicketFile] = useState<File | null>(null);
-    const [uploadRemarks, setUploadRemarks] = useState(stage?.client_departure_data_upload_remarks || "");
+    const [uploadRemarks, setUploadRemarks] = useState("");
 
     const [boardingPassFile, setBoardingPassFile] = useState<File | null>(null);
     const [boardingRemarks, setBoardingRemarks] = useState("");
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [submitError, setSubmitError] = useState<string | null>(null);
-
-    React.useEffect(() => {
-        if (stage) {
-            if (stage.client_departure_data_upload_status === "Drop Required" || stage.departure_tickets_upload_link) {
-                setDropRequired("yes");
-            } else if (stage.client_departure_data_upload_status === "Not Required") {
-                setDropRequired("no");
-            } else {
-                setDropRequired("");
-            }
-            setUploadRemarks(stage.client_departure_data_upload_remarks || "");
-        }
-    }, [stage]);
 
     if (!open) return null;
 
@@ -305,16 +269,10 @@ export default function DepartureFlightModal({ open = true, booking = null as an
                 payload.ticketremarks = uploadRemarks;
                 payload.boardinguploadremarks = boardingRemarks;
                 if (departureTicketFile) {
-                    console.log(`[Departure] Ticket original size: ${departureTicketFile.size} bytes`);
-                    const compressedTicket = await compressImage(departureTicketFile);
-                    console.log(`[Departure] Ticket compressed size: ${compressedTicket.size} bytes`);
-                    payload.ticketscreenshot = await toBase64(compressedTicket);
+                    payload.ticketscreenshot = await toBase64(departureTicketFile);
                 }
                 if (boardingPassFile) {
-                    console.log(`[Departure] Boarding pass original size: ${boardingPassFile.size} bytes`);
-                    const compressedBoarding = await compressImage(boardingPassFile);
-                    console.log(`[Departure] Boarding pass compressed size: ${compressedBoarding.size} bytes`);
-                    payload.boardingpassscreenshot = await toBase64(compressedBoarding);
+                    payload.boardingpassscreenshot = await toBase64(boardingPassFile);
                 }
             }
 
@@ -398,7 +356,7 @@ export default function DepartureFlightModal({ open = true, booking = null as an
                                 Departure Flight Details & Ticket Upload
                             </p>
                             <p style={{ color: "rgba(255,255,255,0.8)", fontSize: 13, margin: "2px 0 0" }}>
-                                {departurePlanned ? `Planned: ${formatDate(departurePlanned)}` : "Complete all fields to proceed"}
+                                {isPlanned ? `Planned: ${formatDate(departurePlanned)}` : "Complete all fields to proceed"}
                             </p>
                         </div>
                     </div>
@@ -448,175 +406,128 @@ export default function DepartureFlightModal({ open = true, booking = null as an
                         </div>
                     </div>
 
-                    {/* Banners */}
-                    {!existsInTracker && (
+                    {/* ── NOT PLANNED YET — show locked banner, hide the form ── */}
+                    {!isPlanned ? (
+                        <div
+                            style={{
+                                background: "#fef9ee",
+                                border: "1.5px solid #fbbf24",
+                                borderRadius: 14,
+                                padding: "28px 24px",
+                                textAlign: "center",
+                                marginBottom: 20,
+                            }}
+                        >
+                            <div style={{ fontSize: 40, marginBottom: 12 }}>🔒</div>
+                            <p style={{ fontSize: 16, fontWeight: 700, color: "#92400e", margin: "0 0 8px" }}>
+                                Departure Stage Not Scheduled Yet
+                            </p>
+                            <p style={{ fontSize: 13, color: "#a16207", margin: 0, maxWidth: 480, marginInline: "auto" }}>
+                                This form will be enabled once the departure stage has been planned in the Guest Tracker.
+                                Please contact the responsible team to schedule the planned date first.
+                            </p>
+                        </div>
+                    ) : isLockedAfterCheckout ? (
                         <div
                             style={{
                                 background: "#fef2f2",
                                 border: "1.5px solid #fca5a5",
                                 borderRadius: 14,
-                                padding: "20px 24px",
+                                padding: "28px 24px",
                                 textAlign: "center",
                                 marginBottom: 20,
                             }}
                         >
-                            <div style={{ fontSize: 32, marginBottom: 8 }}>🔒</div>
-                            <p style={{ fontSize: 15, fontWeight: 700, color: "#991b1b", margin: "0 0 6px" }}>
-                                Form Locked (Booking ID Missing)
+                            <div style={{ fontSize: 40, marginBottom: 12 }}>🔒</div>
+                            <p style={{ fontSize: 16, fontWeight: 700, color: "#991b1b", margin: "0 0 8px" }}>
+                                Departure Form Locked
                             </p>
-                            <p style={{ fontSize: 13, color: "#b91c1c", margin: 0, maxWidth: 640, marginInline: "auto" }}>
-                                This form is locked because the Booking ID is not present in the Guest Tracker Master Sheet. Please add the Booking ID to the Guest Tracker Master Sheet before updating Arrival/Departure Flight Details.
-                            </p>
-                        </div>
-                    )}
-
-                    {existsInTracker && isLockedAfterCheckout && (
-                        <div
-                            style={{
-                                background: "#fef2f2",
-                                border: "1.5px solid #fca5a5",
-                                borderRadius: 14,
-                                padding: "20px 24px",
-                                textAlign: "center",
-                                marginBottom: 20,
-                            }}
-                        >
-                            <div style={{ fontSize: 32, marginBottom: 8 }}>🔒</div>
-                            <p style={{ fontSize: 15, fontWeight: 700, color: "#991b1b", margin: "0 0 6px" }}>
-                                Departure Flight Details Locked
-                            </p>
-                            <p style={{ fontSize: 13, color: "#b91c1c", margin: 0, maxWidth: 640, marginInline: "auto" }}>
-                                Departure Flight Details can only be updated before the guest's checkout. Since the checkout has already been completed, this form is now locked.
+                            <p style={{ fontSize: 13, color: "#b91c1c", margin: 0, maxWidth: 480, marginInline: "auto" }}>
+                                This guest has already checked out, so the departure form can no longer be filled.
+                                It could only be completed on or before the scheduled check-out date.
                             </p>
                         </div>
-                    )}
+                    ) : (
+                        <>
+                            {/* Section 1: Departure Tickets Upload */}
+                            <SectionWrapper theme={SECTION_THEMES.tickets}>
+                                <SectionHeader title="Departure Tickets Upload" color={SECTION_THEMES.tickets.head} />
+                                <div style={{ marginBottom: dropRequired === "yes" ? 16 : 0 }}>
+                                    <Label>Drop Required?</Label>
+                                    <select style={selectStyle} value={dropRequired} onChange={(e) => setDropRequired(e.target.value)}>
+                                        <option value="">Select an option</option>
+                                        <option value="yes">Yes</option>
+                                        <option value="no">No</option>
+                                    </select>
+                                </div>
 
-                    {existsInTracker && !isLockedAfterCheckout && !isPlanned && (
-                        <div
-                            style={{
-                                background: "#f8fafc",
-                                border: "1.5px solid #cbd5e1",
-                                borderRadius: 14,
-                                padding: "20px 24px",
-                                textAlign: "center",
-                                marginBottom: 20,
-                            }}
-                        >
-                            <div style={{ fontSize: 32, marginBottom: 8 }}>🔒</div>
-                            <p style={{ fontSize: 15, fontWeight: 700, color: "#334155", margin: "0 0 6px" }}>
-                                Departure Flight Details Locked
-                            </p>
-                            <p style={{ fontSize: 13, color: "#475569", margin: 0, maxWidth: 640, marginInline: "auto" }}>
-                                This stage is locked until departure planned is filled.
-                            </p>
-                        </div>
-                    )}
-
-                    <>
-                        {/* Section 1: Departure Tickets Upload */}
-                        <SectionWrapper theme={SECTION_THEMES.tickets}>
-                            <SectionHeader title="Departure Tickets Upload" color={SECTION_THEMES.tickets.head} />
-                            <div style={{ marginBottom: dropRequired === "yes" ? 16 : 0 }}>
-                                <Label>Drop Required?</Label>
-                                <select style={selectStyle} disabled={isAlreadySubmitted} value={dropRequired} onChange={(e) => setDropRequired(e.target.value)}>
-                                    <option value="">Select an option</option>
-                                    <option value="yes">Yes</option>
-                                    <option value="no">No</option>
-                                </select>
-                            </div>
-
-                            {dropRequired === "yes" && (
-                                <>
-                                    <div style={{ ...row2, marginBottom: 16 }}>
-                                        <div>
-                                            <Label>Departure Tickets</Label>
-                                            {isAlreadySubmitted ? (
-                                                stage?.departure_tickets_upload_link ? (
-                                                    <div style={readonlyBoxStyle}>
-                                                        <a href={stage.departure_tickets_upload_link} target="_blank" rel="noopener noreferrer" style={{ color: "#6259d6", fontWeight: 600, textDecoration: "underline" }}>
-                                                            ↗ View Ticket
-                                                        </a>
-                                                    </div>
-                                                ) : (
-                                                    <div style={readonlyBoxStyle}>No Ticket Uploaded</div>
-                                                )
-                                            ) : (
+                                {dropRequired === "yes" && (
+                                    <>
+                                        <div style={{ ...row2, marginBottom: 16 }}>
+                                            <div>
+                                                <Label>Upload Departure Tickets</Label>
                                                 <UploadBox id="departure-ticket-upload" file={departureTicketFile} onChange={setDepartureTicketFile} />
-                                            )}
+                                            </div>
+                                            <div>
+                                                <Label>Uploaded By</Label>
+                                                <div style={readonlyBoxStyle}>{currentUser}</div>
+                                            </div>
                                         </div>
                                         <div>
-                                            <Label>Uploaded By</Label>
-                                            <div style={readonlyBoxStyle}>{stage?.departure_doer_name || currentUser}</div>
+                                            <Label>Upload Remarks</Label>
+                                            <textarea
+                                                style={textareaStyle}
+                                                placeholder="Enter remarks..."
+                                                value={uploadRemarks}
+                                                onChange={(e) => setUploadRemarks(e.target.value)}
+                                            />
+                                        </div>
+                                    </>
+                                )}
+
+                                {dropRequired === "no" && (
+                                    <div
+                                        style={{
+                                            marginTop: 12,
+                                            display: "flex",
+                                            alignItems: "center",
+                                            gap: 8,
+                                            fontSize: 13,
+                                            color: "#6b7280",
+                                            background: "#e5e7eb",
+                                            borderRadius: 10,
+                                            padding: "10px 12px",
+                                        }}
+                                    >
+                                        <Check size={14} color="#16a34a" />
+                                        Drop not required — this will be saved to the booking record.
+                                    </div>
+                                )}
+                            </SectionWrapper>
+
+                            {/* Section 2: Departure Boarding Pass Upload - only relevant when drop is required */}
+                            {dropRequired === "yes" && (
+                                <SectionWrapper theme={SECTION_THEMES.boarding}>
+                                    <SectionHeader title="Departure Boarding Pass Upload" color={SECTION_THEMES.boarding.head} />
+                                    <div style={row2}>
+                                        <div>
+                                            <Label>Upload Boarding Pass</Label>
+                                            <UploadBox id="departure-boarding-pass-upload" file={boardingPassFile} onChange={setBoardingPassFile} />
+                                        </div>
+                                        <div>
+                                            <Label>Upload Remarks</Label>
+                                            <textarea
+                                                style={{ ...textareaStyle, minHeight: 42 }}
+                                                placeholder="Enter remarks..."
+                                                value={boardingRemarks}
+                                                onChange={(e) => setBoardingRemarks(e.target.value)}
+                                            />
                                         </div>
                                     </div>
-                                    <div>
-                                        <Label>Upload Remarks</Label>
-                                        <textarea
-                                            style={textareaStyle}
-                                            disabled={isAlreadySubmitted}
-                                            placeholder={isAlreadySubmitted ? "—" : "Enter remarks..."}
-                                            value={uploadRemarks}
-                                            onChange={(e) => setUploadRemarks(e.target.value)}
-                                        />
-                                    </div>
-                                </>
+                                </SectionWrapper>
                             )}
-
-                            {dropRequired === "no" && (
-                                <div
-                                    style={{
-                                        marginTop: 12,
-                                        display: "flex",
-                                        alignItems: "center",
-                                        gap: 8,
-                                        fontSize: 13,
-                                        color: "#6b7280",
-                                        background: "#e5e7eb",
-                                        borderRadius: 10,
-                                        padding: "10px 12px",
-                                    }}
-                                >
-                                    <Check size={14} color="#16a34a" />
-                                    Drop not required — saved to the booking record.
-                                </div>
-                            )}
-                        </SectionWrapper>
-
-                        {/* Section 2: Departure Boarding Pass Upload - only relevant when drop is required */}
-                        {dropRequired === "yes" && (
-                            <SectionWrapper theme={SECTION_THEMES.boarding}>
-                                <SectionHeader title="Departure Boarding Pass Upload" color={SECTION_THEMES.boarding.head} />
-                                <div style={row2}>
-                                    <div>
-                                        <Label>Boarding Pass</Label>
-                                        {isAlreadySubmitted ? (
-                                            stage?.departure_boarding_pass_upload_link ? (
-                                                <div style={readonlyBoxStyle}>
-                                                    <a href={stage.departure_boarding_pass_upload_link} target="_blank" rel="noopener noreferrer" style={{ color: "#6259d6", fontWeight: 600, textDecoration: "underline" }}>
-                                                        ↗ View Boarding Pass
-                                                    </a>
-                                                </div>
-                                            ) : (
-                                                <div style={readonlyBoxStyle}>No Boarding Pass Uploaded</div>
-                                            )
-                                        ) : (
-                                            <UploadBox id="departure-boarding-pass-upload" file={boardingPassFile} onChange={setBoardingPassFile} />
-                                        )}
-                                    </div>
-                                    <div>
-                                        <Label>Upload Remarks</Label>
-                                        <textarea
-                                            style={{ ...textareaStyle, minHeight: 42 }}
-                                            disabled={isAlreadySubmitted}
-                                            placeholder={isAlreadySubmitted ? "—" : "Enter remarks..."}
-                                            value={boardingRemarks}
-                                            onChange={(e) => setBoardingRemarks(e.target.value)}
-                                        />
-                                    </div>
-                                </div>
-                            </SectionWrapper>
-                        )}
-                    </>
+                        </>
+                    )}
 
                     {/* Footer */}
                     <div style={{ display: "flex", gap: 12, flexDirection: "column" }}>
@@ -650,9 +561,9 @@ export default function DepartureFlightModal({ open = true, booking = null as an
                                     opacity: isSubmitting ? 0.5 : 1,
                                 }}
                             >
-                                {isAlreadySubmitted ? "Close" : "Cancel"}
+                                Cancel
                             </button>
-                            {isPlanned && !isLockedAfterCheckout && !isAlreadySubmitted && (
+                            {isPlanned && !isLockedAfterCheckout && (
                                 <button
                                     onClick={handleSubmit}
                                     disabled={!isValid() || isSubmitting}
@@ -685,26 +596,6 @@ export default function DepartureFlightModal({ open = true, booking = null as an
                                         <><Send size={15} /> Submit</>
                                     )}
                                 </button>
-                            )}
-                            {isAlreadySubmitted && (
-                                <div
-                                    style={{
-                                        flex: 2,
-                                        padding: "12px 0",
-                                        borderRadius: 12,
-                                        background: "#e5e7eb",
-                                        color: "#9ca3af",
-                                        fontSize: 14,
-                                        fontWeight: 700,
-                                        display: "flex",
-                                        alignItems: "center",
-                                        justifyContent: "center",
-                                        gap: 8,
-                                        cursor: "not-allowed",
-                                    }}
-                                >
-                                    🔒 {!existsInTracker ? "Locked (Missing Tracker)" : isLockedAfterCheckout ? "Locked (Checkout Completed)" : !isPlanned ? "Locked (Planned Missing)" : "Submitted & Locked"}
-                                </div>
                             )}
                         </div>
                     </div>

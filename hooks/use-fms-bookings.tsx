@@ -153,6 +153,7 @@ export interface Booking {
   mlFinalStatus?: string
   mlRemarks?: string
   isEditedOneTime?: boolean
+  checkInIdExist?: boolean
   rawItem?: any;
 
   // Guest tracker data (from ktahv_guest_tracker)
@@ -495,6 +496,7 @@ export function useBookings() {
               mlFinalStatus: item?.mlDetails?.mlFinalStatus || "",
               mlRemarks: item?.mlDetails?.mlRemarks || "",
               isEditedOneTime: item?.isEditedOneTime || false,
+              checkInIdExist: item?.checkinidexsist === true,
               rawItem: item,
 
               // Guest tracker data

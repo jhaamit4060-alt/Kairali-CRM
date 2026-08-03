@@ -836,6 +836,7 @@ export default function SalesAccountsTeamPage() {
     screenshot: null as File | null,
     paymentLocation: "",
     paymentCollectedBy: "",
+    pendingPaymentAmount: "",
   })
   // NEW STATE FOR PAYMENT SCREENSHOT
   const [paymentScreenshot, setPaymentScreenshot] = useState<File | null>(null);
@@ -4384,10 +4385,26 @@ export default function SalesAccountsTeamPage() {
               screenshot: screenshotData,
               paymentLocation: paymentData.paymentLocation,
               paymentCollectedBy: paymentData.paymentCollectedBy,
+              pendingPaymentAmount: paymentData.pendingPaymentAmount,
             },
           }),
         })
-
+        console.log(JSON.stringify({
+          paymentData: {
+            bookingId: selectedBookingForPayment?.bookingId,
+            amount: paymentData.amount,
+            receivedAmount: paymentData.receivedAmount,
+            currency: paymentData.currency,
+            paymentMode: paymentData.paymentMode,
+            receivedDate: paymentData.receivedDate,
+            receiptNumber: paymentData.receiptNumber,
+            screenshot: screenshotData,
+            paymentLocation: paymentData.paymentLocation,
+            paymentCollectedBy: paymentData.paymentCollectedBy,
+            pendingPaymentAmount: paymentData.pendingPaymentAmount,
+          },
+        }))
+        debugger
         const data = await validateResponse(response)
         await refetchBookings()
       },
@@ -5090,7 +5107,52 @@ export default function SalesAccountsTeamPage() {
     return getTotalReceivedRaw(b) * rate;
   };
 
-  const totalAmount = filteredBookings.reduce((sum, booking) => sum + (booking.amount || 0), 0)
+  useEffect(() => {
+    if (!selectedBookingForPayment) {
+      if (paymentData.pendingPaymentAmount !== "") {
+        setPaymentData((prev) => ({
+          ...prev,
+          pendingPaymentAmount: "",
+        }));
+      }
+      return;
+    }
+
+    const originalAmt = Number(selectedBookingForPayment.originalAmount || selectedBookingForPayment.amount || 0);
+    const receivedAmt = getTotalReceivedRaw(selectedBookingForPayment);
+
+    // Current input currency and rate
+    const cur = String(paymentData.currency || "INR").toUpperCase();
+    const inputRate = cur === "USD" ? 85.74 : (cur === "EURO" || cur === "EUR" ? 89.26 : 1);
+
+    // Booking original currency and rate
+    const bookingCur = String(selectedBookingForPayment.currency || "INR").toUpperCase();
+    const bookingRate = bookingCur === "USD" ? 85.74 : (bookingCur === "EURO" || bookingCur === "EUR" ? 89.26 : 1);
+
+    // Calculate remaining pending in INR
+    const pendingInINR = originalAmt - receivedAmt;
+    const inputtedInINR = (parseFloat(String(paymentData.receivedAmount)) || 0) * inputRate;
+    const remainingInINR = Math.max(0, pendingInINR - inputtedInINR);
+
+    // Display in booking's original currency
+    const remainingInBookingCurrency = remainingInINR / bookingRate;
+    const pendingVal = remainingInBookingCurrency.toLocaleString(undefined, {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 2,
+    });
+
+    if (paymentData.pendingPaymentAmount !== pendingVal) {
+      setPaymentData((prev) => ({
+        ...prev,
+        pendingPaymentAmount: pendingVal,
+      }));
+    }
+  }, [
+    paymentData.receivedAmount,
+    paymentData.currency,
+    selectedBookingForPayment,
+  ]);
+
   const totalReceivedINR = filteredBookings.reduce((sum, booking) => sum + getReceivedINR(booking), 0)
   const totalReceived = totalReceivedINR; // backwards compatibility
 
@@ -5104,6 +5166,7 @@ export default function SalesAccountsTeamPage() {
   const cancelledBookingsList = filteredBookings.filter(b => b.status === "cancelled" && b.isAutoReleased !== "Auto Released");
   const cancelledCollectionsINR = cancelledBookingsList.reduce((sum, b) => sum + getReceivedINR(b), 0);
   const cancelledGrossValue = cancelledBookingsList.reduce((sum, b) => sum + (b.amount || 0), 0);
+  const totalAmount = totalReceived + activeOutstandingValue + cancelledGrossValue + autoReleaseAmount;
 
   const confirmedBookings = filteredBookings.filter((b) => b.verfiedOrNot == "Confirm-Verified").length
   const pendingBookings = filteredBookings.filter((b) => b.status === "pending").length
@@ -7235,7 +7298,7 @@ export default function SalesAccountsTeamPage() {
                         </TableCell>
                         <TableCell className="text-right">
                           <div className="flex items-center justify-end gap-2">
-                            {isCheckInPastOrToday(booking.checkIn) && (
+                            {booking.checkInIdExist === true && (
                               <Button
                                 variant="outline"
                                 size="sm"
@@ -11132,32 +11195,7 @@ export default function SalesAccountsTeamPage() {
                       </Label>
                       <p className="text-lg font-semibold text-red-700">
                         {getCurrencySymbol(String(selectedBookingForPayment.currency).slice(0, 3))}{" "}
-                        {selectedBookingForPayment
-                          ? (() => {
-                            const originalAmt = selectedBookingForPayment.originalAmount;
-                            const receivedAmt = getTotalReceivedRaw(selectedBookingForPayment);
-
-                            // Current input currency and rate
-                            const cur = String(paymentData.currency || "INR").toUpperCase();
-                            const inputRate = cur === "USD" ? 85.74 : (cur === "EURO" || cur === "EUR" ? 89.26 : 1);
-
-                            // Booking original currency and rate
-                            const bookingCur = String(selectedBookingForPayment.currency || "INR").toUpperCase();
-                            const bookingRate = bookingCur === "USD" ? 85.74 : (bookingCur === "EURO" || bookingCur === "EUR" ? 89.26 : 1);
-
-                            // Calculate remaining pending in INR
-                            const pendingInINR = originalAmt - receivedAmt;
-                            const inputtedInINR = (parseFloat(paymentData.receivedAmount) || 0) * inputRate;
-                            const remainingInINR = Math.max(0, pendingInINR - inputtedInINR);
-
-                            // Display in booking's original currency
-                            const remainingInBookingCurrency = remainingInINR / bookingRate;
-                            return remainingInBookingCurrency.toLocaleString(undefined, {
-                              minimumFractionDigits: 0,
-                              maximumFractionDigits: 2
-                            });
-                          })()
-                          : 0}
+                        {paymentData.pendingPaymentAmount || "0"}
                       </p>
                     </div>
                   </div>

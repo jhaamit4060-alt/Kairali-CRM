@@ -36,7 +36,7 @@ const DB_CONFIG = {
   user: requireEnv('DB_USER'),
   password: requireEnv('DB_PASSWORD'),
   waitForConnections: true,
-  connectionLimit: 10,
+  connectionLimit: 20,
   connectTimeout: 30000,
   timezone: '+05:30',
 }

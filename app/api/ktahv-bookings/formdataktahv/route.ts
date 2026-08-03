@@ -419,6 +419,8 @@ async function getDataById_NewXXXX(currentTextId: any, formType: any, pool: any)
                 p1.Res_code,
                 p1.edit_ID ,
                 p1.txt_grp_name ,
+                p1.txt_name1,
+                p1.txt_email_ID1,
                 p1.txt_ref_name,
                 p1.txt_code ,
                 p1.txt_ref_phne ,
@@ -472,14 +474,14 @@ async function getDataById_NewXXXX(currentTextId: any, formType: any, pool: any)
             notes = r.booking_taken_by;
             grpedID = r.edit_ID || '';
             grpPatientId = r.txt_patient_ID1 || '';
-            var name = r.txt_ref_name ? r.txt_ref_name.toString().split(" ") : ['', '', ''];
+            var name = r.txt_name1 ? r.txt_name1.toString().split(" ") : ['', '', '', ''];
             secondaryGuests[`secondaryguest${guestIndex}`] = {
                 [`grp_editID_${guestIndex}`]: grpedID,
                 [`grp_patientID_${guestIndex}`]: grpPatientId,
                 [`grp-title_${guestIndex}`]: name[0] || '',
                 [`grp-firstname_${guestIndex}`]: name[1] || '',
-                [`grp-middlename_${guestIndex}`]: "",
-                [`grp-lastname_${guestIndex}`]: name[2] || '',
+                [`grp-middlename_${guestIndex}`]: name[2] || "",
+                [`grp-lastname_${guestIndex}`]: name[3] || '',
                 [`grp-dob_${guestIndex}`]: "",
                 [`grp-gender_${guestIndex}`]: r.ddl_gender1 || '',
                 [`grp-country-code_${guestIndex}`]: r.txt_code ? getCountryCode(String(r.txt_code)) : '',
