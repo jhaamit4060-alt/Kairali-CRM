@@ -4942,7 +4942,7 @@ export default function SalesAccountsTeamPage() {
                 "1": {
                   ...booking.checkOutPersonStage?.["1"],
                   actual: new Date().toISOString(),
-                  status: canonicalCheckoutStatus,
+                  status: checkoutVerifyData.paymentReceivedStatus,
                   remarks: checkoutVerifyData.remarks,
                   doer: user?.email || user?.name || "Current User",
                 }
