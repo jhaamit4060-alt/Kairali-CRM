@@ -131,7 +131,7 @@ export const PHONE_LENGTH_BY_CODE: Record<string, { min: number; max: number }> 
   "+44": { min: 10, max: 10 },   // UK
   "+971": { min: 9, max: 9 },    // UAE
   "+61": { min: 9, max: 9 },     // Australia
-  "+49": { min: 10, max: 11 },   // Germany
+  "+49": { min: 9, max: 11 },   // Germany
   "+33": { min: 9, max: 9 },     // France
   "+81": { min: 10, max: 10 },   // Japan
   "+86": { min: 11, max: 11 },   // China
