@@ -4,6 +4,46 @@ import { getPool } from "@/lib/db";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
+function toDateOnly(value: unknown): string {
+    if (!value) return '';
+
+    const pad = (part: string | number) => String(part).padStart(2, '0');
+
+    if (typeof value === 'string') {
+        const s = value.trim();
+        if (!s) return '';
+
+        const isoDate = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+        if (isoDate) return `${isoDate[1]}-${isoDate[2]}-${isoDate[3]}`;
+
+        const slashDate = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+        if (slashDate) {
+            const first = Number(slashDate[1]);
+            const second = Number(slashDate[2]);
+            const year = slashDate[3];
+            const month = first > 12 ? second : first;
+            const day = first > 12 ? first : second;
+            return `${year}-${pad(month)}-${pad(day)}`;
+        }
+    }
+
+    const date = value instanceof Date ? value : new Date(String(value));
+    if (isNaN(date.getTime())) return '';
+
+    const parts = new Intl.DateTimeFormat('en-GB', {
+        timeZone: 'Asia/Kolkata',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+    }).formatToParts(date);
+    const getPart = (type: string) => parts.find(part => part.type === type)?.value || '';
+    const year = getPart('year');
+    const month = getPart('month');
+    const day = getPart('day');
+
+    return year && month && day ? `${year}-${month}-${day}` : '';
+}
+
 export async function GET(req: NextRequest) {
     const pool = await getPool();
     const { searchParams } = new URL(req.url)
@@ -22,27 +62,42 @@ async function getAllData(pool: any) {
         timestamp: new Date().toISOString(),
         data: {}
     };
-    var roomMaxPaxMap = await getRoomMaxPaxes(pool);
+    const [
+        roomMaxPaxMap,
+        servicesData,
+        rackPackagesData,
+        roomPricesData,
+        mealPricesData,
+        dataSourceData,
+        clientTypeData,
+        clientCategoryData,
+        paymentTermsData,
+        childRateData,
+        taAcitveData
+    ] = await Promise.all([
+        getRoomMaxPaxes(pool),
+        getServices(pool),
+        getRackPackages(pool),
+        getRoomPrices(pool),
+        getMealPrices(pool),
+        getDataSource(pool),
+        getClientType(pool),
+        getClientCategory(pool),
+        getPaymentTerms(pool),
+        getChildRate(pool),
+        getTravelAgentData(pool)
+    ]);
+
     data.data[roomMaxPaxMap[0]] = roomMaxPaxMap[1];
-    var servicesData = await getServices(pool);
     data.data[servicesData[0]] = servicesData[1];
-    var rackPackagesData = await getRackPackages(pool);
     data.data[rackPackagesData[0]] = rackPackagesData[1];
-    var roomPricesData = await getRoomPrices(pool);
     data.data[roomPricesData[0]] = roomPricesData[1];
-    var mealPricesData = await getMealPrices(pool);
     data.data[mealPricesData[0]] = mealPricesData[1];
-    var dataSourceData = await getDataSource(pool);
     data.data[dataSourceData[0]] = dataSourceData[1];
-    var clientTypeData = await getClientType(pool);
     data.data[clientTypeData[0]] = clientTypeData[1];
-    var clientCategoryData = await getClientCategory(pool);
     data.data[clientCategoryData[0]] = clientCategoryData[1];
-    var paymentTermsData = await getPaymentTerms(pool);
     data.data[paymentTermsData[0]] = paymentTermsData[1];
-    var childRateData = await getChildRate(pool);
     data.data[childRateData[0]] = childRateData[1];
-    var taAcitveData = await getTravelAgentData(pool);
     data.data[taAcitveData[0]] = taAcitveData[1];
 
     return data;
@@ -161,8 +216,8 @@ async function getDataById_NewXXXX(currentTextId: any, formType: any, pool: any)
                     [`g1-province_1`]: r.ddl_States2 || '',
                     [`g1-zip_1`]: r.txt_Postal_Code1 || '',
                     [`g1-address_1`]: r.txt_Home_Address1 || '',
-                    [`g1-arrival-date_1`]: r.txt_Arrival2 || '',
-                    [`g1-departure-date_1`]: r.txt_Departure2 || '',
+                    [`g1-arrival-date_1`]: toDateOnly(r.txt_Arrival2),
+                    [`g1-departure-date_1`]: toDateOnly(r.txt_Departure2),
                     [`g1-nights_1`]: r.txt_nights2 || '',
                     [`g1-repeat-guest_1`]: r.repeat_client || '',
                     [`g1-programme_1`]: r.ddl_Packages2 || '',
@@ -188,8 +243,8 @@ async function getDataById_NewXXXX(currentTextId: any, formType: any, pool: any)
                     [`g1-province_1`]: r.ddl_States2 || '',
                     [`g1-zip_1`]: r.txt_Postal_Code1 || '',
                     [`g1-address_1`]: r.txt_Home_Address1 || '',
-                    [`g1-arrival-date_1`]: r.txt_Arrival2 || '',
-                    [`g1-departure-date_1`]: r.txt_Departure2 || '',
+                    [`g1-arrival-date_1`]: toDateOnly(r.txt_Arrival2),
+                    [`g1-departure-date_1`]: toDateOnly(r.txt_Departure2),
                     [`g1-nights_1`]: r.txt_nights2 || '',
                     [`g1-repeat-guest_1`]: r.repeat_client || '',
                     [`g1-programme_1`]: r.ddl_Packages2 || '',
@@ -212,8 +267,8 @@ async function getDataById_NewXXXX(currentTextId: any, formType: any, pool: any)
                     [`g2-province_2`]: r.ddl_States3 || '',
                     [`g2-zip_2`]: r.txt_Postal_Code2 || '',
                     [`g2-address_2`]: r.txt_Home_Address2 || '',
-                    [`g2-arrival-date_2`]: r.txt_Arrival3 || '',
-                    [`g2-departure-date_2`]: r.txt_Departure3 || '',
+                    [`g2-arrival-date_2`]: toDateOnly(r.txt_Arrival3),
+                    [`g2-departure-date_2`]: toDateOnly(r.txt_Departure3),
                     [`g2-nights_2`]: r.txt_nights3 || '',
                     [`g2-repeat-guest_2`]: r.repeat_client || '',
                     [`g2-programme_2`]: r.ddl_Packages3 || '',
@@ -240,8 +295,8 @@ async function getDataById_NewXXXX(currentTextId: any, formType: any, pool: any)
                     [`g1-province_1`]: r.ddl_States2 || '',
                     [`g1-zip_1`]: r.txt_Postal_Code1 || '',
                     [`g1-address_1`]: r.txt_Home_Address1 || '',
-                    [`g1-arrival-date_1`]: r.txt_Arrival2 || '',
-                    [`g1-departure-date_1`]: r.txt_Departure2 || '',
+                    [`g1-arrival-date_1`]: toDateOnly(r.txt_Arrival2),
+                    [`g1-departure-date_1`]: toDateOnly(r.txt_Departure2),
                     [`g1-nights_1`]: r.txt_nights2 || '',
                     [`g1-repeat-guest_1`]: r.repeat_client || '',
                     [`g1-programme_1`]: r.ddl_Packages2 || '',
@@ -264,8 +319,8 @@ async function getDataById_NewXXXX(currentTextId: any, formType: any, pool: any)
                     [`g2-province_2`]: r.ddl_States3 || '',
                     [`g2-zip_2`]: r.txt_Postal_Code2 || '',
                     [`g2-address_2`]: r.txt_Home_Address2 || '',
-                    [`g2-arrival-date_2`]: r.txt_Arrival3 || '',
-                    [`g2-departure-date_2`]: r.txt_Departure3 || '',
+                    [`g2-arrival-date_2`]: toDateOnly(r.txt_Arrival3),
+                    [`g2-departure-date_2`]: toDateOnly(r.txt_Departure3),
                     [`g2-nights_2`]: r.txt_nights3 || '',
                     [`g2-repeat-guest_2`]: r.repeat_client || '',
                     [`g2-programme_2`]: r.ddl_Packages3 || '',
@@ -288,8 +343,8 @@ async function getDataById_NewXXXX(currentTextId: any, formType: any, pool: any)
                     [`g3-province_3`]: r.ddl_States4 || '',
                     [`g3-zip_3`]: r.txt_Postal_Code3 || '',
                     [`g3-address_3`]: r.txt_Home_Address3 || '',
-                    [`g3-arrival-date_3`]: r.txt_Arrival4 || '',
-                    [`g3-departure-date_3`]: r.txt_Departure4 || '',
+                    [`g3-arrival-date_3`]: toDateOnly(r.txt_Arrival4),
+                    [`g3-departure-date_3`]: toDateOnly(r.txt_Departure4),
                     [`g3-nights_3`]: r.txt_nights4 || '',
                     [`g3-repeat-guest_3`]: r.repeat_client || '',
                     [`g3-programme_3`]: r.ddl_Packages4 || '',
@@ -319,8 +374,8 @@ async function getDataById_NewXXXX(currentTextId: any, formType: any, pool: any)
                 },
 
                 primaryBooking: {
-                    'g1-arrival-date': r.arrival_date ? new Date(r.arrival_date).toLocaleDateString("en-US", { timeZone: "Asia/Kolkata" }) : '',
-                    'g1-departure-date': r.departure_date ? new Date(r.departure_date).toLocaleDateString("en-US", { timeZone: "Asia/Kolkata" }) : '',
+                    'g1-arrival-date': toDateOnly(r.arrival_date),
+                    'g1-departure-date': toDateOnly(r.departure_date),
                     'g1-nights': r.days_of_stay || '',
                     'g1-repeat-guest': r.repeat_client || '',
                     'g1-package-type': r.package_type || '',
@@ -447,17 +502,18 @@ async function getDataById_NewXXXX(currentTextId: any, formType: any, pool: any)
                 LEFT JOIN response_of_group_bookings_part2 p2 ON p1.unique_key = p2.unique_key
                 WHERE p1.Res_code =? 
             `, [currentTextId]);
-        var maxEditTime = 0;
-        let rowdata = [];
+        // Collect the latest row per guest (keyed by patient ID) so all guests are returned
+        // even if different guests were saved at different edit_time_values.
+        var latestPerGuest: Record<string, any> = {};
         for (let i = 0; i < groupbookingdata.length; i++) {
             let r = groupbookingdata[i];
-            if (r.edit_time_value > maxEditTime) {
-                maxEditTime = r.edit_time_value;
-                rowdata = [r];
-            } else if (r.edit_time_value == maxEditTime) {
-                rowdata.push(r);
+            var guestKey = String(r.txt_patient_ID1 || i);
+            var existing = latestPerGuest[guestKey];
+            if (!existing || (r.edit_time_value > existing.edit_time_value)) {
+                latestPerGuest[guestKey] = r;
             }
         }
+        let rowdata = Object.values(latestPerGuest);
         var secondaryGuests = {};
         var grpName = "", grpPhone = "", grpEmail = "", grpPax = "", notes = "", grpedID = "", grpPatientId = "", grpUniqueId = "", grpCountry = "";
         var guestIndex = 1;
@@ -493,8 +549,8 @@ async function getDataById_NewXXXX(currentTextId: any, formType: any, pool: any)
                 [`grp-province_${guestIndex}`]: r.state || '',
                 [`grp-zip_${guestIndex}`]: r.zip || '',
                 [`grp-address_${guestIndex}`]: r.address || '',
-                [`grp-arrival-date_${guestIndex}`]: r.txt_Arrival1 ? new Date(r.txt_Arrival1).toLocaleDateString("en-US", { timeZone: "Asia/Kolkata" }) : '',
-                [`grp-departure-date_${guestIndex}`]: r.txt_Departure1 ? new Date(r.txt_Departure1).toLocaleDateString("en-US", { timeZone: "Asia/Kolkata" }) : '',
+                [`grp-arrival-date_${guestIndex}`]: toDateOnly(r.txt_Arrival1),
+                [`grp-departure-date_${guestIndex}`]: toDateOnly(r.txt_Departure1),
                 [`grp-nights_${guestIndex}`]: r.txt_nights1 || '',
                 [`grp-repeat-guest_${guestIndex}`]: r.repeat_guest || '',
                 [`grp-programme_${guestIndex}`]: r.ddl_Packages1 || '',
